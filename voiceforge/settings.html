@@ -1,0 +1,362 @@
+<div id="tts_settings">
+    <div class="inline-drawer-content voiceforge-settings-root">
+    <div id="tts_status">
+    </div>
+
+            <div id="voiceforge_connection_mount" class="voiceforge-main-panel"></div>
+            <hr>
+            
+            <!-- Provider Settings (Connection, Pipeline, TTS Settings) -->
+            <div class="voiceforge-section">
+                <div class="voiceforge-section-header" id="tts_provider_header" style="cursor: pointer;">
+                    <span>Generation Settings</span>
+                    <i id="tts_provider_toggle_icon" class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div id="tts_provider_content" style="display: none; margin-top: 8px;">
+                    <form id="tts_provider_settings">
+                        <!-- Provider settings will be dynamically inserted here -->
+                    </form>
+                    <hr>
+                    <div>
+                        <label class="checkbox_label" for="tts_enabled">
+                            <input type="checkbox" id="tts_enabled" name="tts_enabled">
+                            <small>Enabled</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_playback_bar">
+                            <input type="checkbox" id="tts_playback_bar" checked>
+                            <small>Show Playback Bar</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_auto_generation">
+                            <input type="checkbox" id="tts_auto_generation">
+                            <small>Auto Generation</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_non_call_enabled">
+                            <input type="checkbox" id="tts_non_call_enabled">
+                            <small>Enable TTS outside call mode</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_generation_metadata_prefix">
+                            <input type="checkbox" id="tts_generation_metadata_prefix">
+                            <small>Prefix assistant replies with &lt;time: ...&gt; metadata</small>
+                        </label>
+                        <label class="checkbox_label" for="voiceforge_generation_weather_context_enabled">
+                            <input type="checkbox" id="voiceforge_generation_weather_context_enabled">
+                            <small>Include &lt;weather: ...&gt; metadata in reply prefix</small>
+                        </label>
+                        <div style="margin: 8px 0 8px 20px;">
+                            <label for="voiceforge_generation_weather_refresh_minutes">Weather refresh interval (minutes)</label>
+                            <input type="number" id="voiceforge_generation_weather_refresh_minutes" class="text_pole" min="5" max="180" step="1">
+                        </div>
+                        <div style="margin: 8px 0 8px 20px;">
+                            <label for="voiceforge_generation_weather_manual_city">Fallback city (optional)</label>
+                            <input type="text" id="voiceforge_generation_weather_manual_city" class="text_pole" placeholder="e.g. Seattle">
+                            <small class="text_muted">Used if geolocation permission is unavailable</small>
+                        </div>
+                        <label class="checkbox_label" for="tts_narrate_quoted">
+                            <input type="checkbox" id="tts_narrate_quoted">
+                            <small>Only narrate quoted speech</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_narrate_dialogues">
+                            <input type="checkbox" id="tts_narrate_dialogues">
+                            <small>Ignore *asterisk actions*</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_skip_brackets">
+                            <input type="checkbox" id="tts_skip_brackets">
+                            <small>Ignore [text inside brackets]</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_skip_codeblocks">
+                            <input type="checkbox" id="tts_skip_codeblocks">
+                            <small>Skip codeblocks</small>
+                        </label>
+                        <label class="checkbox_label" for="tts_skip_tags">
+                            <input type="checkbox" id="tts_skip_tags">
+                            <small>Skip HTML tags</small>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            <!-- Voice Map Section -->
+            <div class="voiceforge-section">
+                <div class="voiceforge-section-header" id="tts_voicemap_header" style="cursor: pointer;">
+                    <span>Character Voice Map</span>
+                    <i id="tts_voicemap_toggle_icon" class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div id="tts_voicemap_content" style="display: none; margin-top: 8px;">
+                    <div id="tts_voicemap_block">
+                        <!-- Voice map entries will be dynamically inserted here -->
+                    </div>
+                </div>
+            </div>
+
+            <hr>
+
+            <!-- Dynamic Audio Section (BGM + Ambient) -->
+            <div class="voiceforge-section">
+                <div class="voiceforge-section-header" id="audio_section_header" style="cursor: pointer;">
+                    <span>🎵 Background Music & Ambient</span>
+                    <i id="audio_toggle_icon" class="fa-solid fa-chevron-down"></i>
+                </div>
+                <div id="audio_section_content" style="display: none; margin-top: 8px;">
+                    <!-- Audio Enable -->
+                    <div style="margin-bottom: 10px;">
+                        <label class="checkbox_label" for="audio_enabled">
+                            <input type="checkbox" id="audio_enabled" name="audio_enabled">
+                            <small>Enable Dynamic Audio</small>
+                        </label>
+                        <label class="checkbox_label" for="audio_dynamic_bgm_enabled">
+                            <input type="checkbox" id="audio_dynamic_bgm_enabled" name="audio_dynamic_bgm_enabled">
+                            <small>Expression-based BGM (requires character expressions)</small>
+                        </label>
+                    </div>
+
+                    <!-- BGM Controls -->
+                    <div class="audio-ui-block">
+                        <label>Background Music</label>
+                        <div class="audio-container">
+                            <div class="audio-mute">
+                                <div id="audio_bgm_mute" class="menu_button audio-player-button" title="Mute/Unmute">
+                                    <i class="fa-solid fa-volume-high fa-lg fa-fw" id="audio_bgm_mute_icon"></i>
+                                </div>
+                            </div>
+                            <div class="audio-volume">
+                                <input type="range" class="audio-slider" id="audio_bgm_volume_slider" value="50" min="0" max="100">
+                                <span id="audio_bgm_volume" class="audio-volume-label">50</span>
+                            </div>
+                            <div class="audio-playlist">
+                                <select id="audio_bgm_select" class="text_pole">
+                                    <option value="">-- Select BGM --</option>
+                                </select>
+                            </div>
+                            <div class="audio-lock">
+                                <div id="audio_bgm_lock" class="menu_button audio-player-button" title="Loop current track">
+                                    <i class="fa-solid fa-repeat fa-lg fa-fw" id="audio_bgm_lock_icon"></i>
+                                </div>
+                            </div>
+                            <div class="audio-random">
+                                <div id="audio_bgm_random" class="menu_button audio-player-button" title="Random track">
+                                    <i class="fa-solid fa-shuffle fa-lg fa-fw"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Ambient Controls -->
+                    <div class="audio-ui-block">
+                        <label>Ambient Sound</label>
+                        <div class="audio-container">
+                            <div class="audio-mute">
+                                <div id="audio_ambient_mute" class="menu_button audio-player-button" title="Mute/Unmute">
+                                    <i class="fa-solid fa-volume-high fa-lg fa-fw" id="audio_ambient_mute_icon"></i>
+                                </div>
+                            </div>
+                            <div class="audio-volume">
+                                <input type="range" class="audio-slider" id="audio_ambient_volume_slider" value="50" min="0" max="100">
+                                <span id="audio_ambient_volume" class="audio-volume-label">50</span>
+                            </div>
+                            <div class="audio-playlist">
+                                <select id="audio_ambient_select" class="text_pole">
+                                    <option value="">-- Select Ambient --</option>
+                                </select>
+                            </div>
+                            <div class="audio-lock">
+                                <div id="audio_ambient_lock" class="menu_button audio-player-button" title="Lock to current">
+                                    <i class="fa-solid fa-lock-open fa-lg fa-fw" id="audio_ambient_lock_icon"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- VoiceForge TTS Background -->
+                    <div class="audio-ui-block" style="margin-top: 10px;">
+                        <label>VoiceForge TTS Background Audio</label>
+                        <div class="audio-container" style="flex-wrap: wrap; gap: 6px;">
+                            <div class="audio-volume">
+                                <input type="range" class="audio-slider" id="audio_voiceforge_bg_volume_slider" value="30" min="0" max="100">
+                                <span id="audio_voiceforge_bg_volume" class="audio-volume-label">30</span>
+                            </div>
+                            <div id="audio_voiceforge_bg_stop" class="menu_button audio-player-button" title="Stop Background">
+                                <i class="fa-solid fa-stop fa-lg fa-fw"></i>
+                            </div>
+                        </div>
+                        <div style="margin-top: 6px; display: flex; gap: 12px; flex-wrap: wrap;">
+                            <label class="checkbox_label" for="audio_voiceforge_bg_persist" style="margin: 0;">
+                                <input type="checkbox" id="audio_voiceforge_bg_persist" checked>
+                                <small>Keep playing until voice changes</small>
+                            </label>
+                        </div>
+                        <small class="text_muted">Per-character background tracks set in voice map will play during TTS.</small>
+                    </div>
+
+                    <!-- BGM Cooldown -->
+                    <div style="margin-top: 10px;">
+                        <label for="audio_bgm_cooldown">BGM switch cooldown (seconds)</label>
+                        <input id="audio_bgm_cooldown" class="text_pole wide30p" type="number" min="0" value="30">
+                    </div>
+
+                    <!-- Refresh Button -->
+                    <div style="margin-top: 10px;">
+                        <div id="audio_refresh_assets" class="menu_button" style="width: fit-content;">
+                            <i class="fa-solid fa-refresh"></i> Refresh Audio Assets
+                        </div>
+                    </div>
+
+                    <!-- Hints -->
+                    <div style="margin-top: 10px; font-size: 0.85em; color: var(--SmartThemeQuoteColor);">
+                        <b>Tip:</b> Put character BGM files in <code>/data/&lt;user&gt;/characters/&lt;CharName&gt;/bgm/</code>. 
+                        Name files like <code>neutral_1.mp3</code>, <code>joy_1.mp3</code>, etc. for expression-based switching.
+                    </div>
+                </div>
+            </div>
+
+    </div>
+</div>
+
+<style>
+.voiceforge-settings-root {
+    display: block;
+}
+
+.voiceforge-section {
+    margin: 8px 0;
+}
+
+.voiceforge-main-panel {
+    margin: 8px 0;
+    padding: 10px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.voiceforge-main-panel:empty {
+    display: none;
+}
+
+.voiceforge-section-header {
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.voiceforge-voice-entry {
+    background: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+    padding: 10px;
+    margin-bottom: 8px;
+}
+
+.voiceforge-voice-entry .voice-name {
+    font-weight: 600;
+    margin-bottom: 8px;
+    color: var(--SmartThemeBodyColor);
+}
+
+.voiceforge-voice-entry .voice-settings {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+}
+
+.voiceforge-voice-entry .voice-settings select {
+    width: 100%;
+}
+
+.voiceforge-voice-entry .voice-toggles {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.voiceforge-voice-entry .voice-toggles label {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.9em;
+    cursor: pointer;
+}
+
+.voiceforge-voice-entry .voice-toggles input[type="checkbox"] {
+    margin: 0;
+}
+
+/* Audio Controls Styling */
+.audio-ui-block {
+    margin-bottom: 10px;
+}
+
+.audio-ui-block > label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+}
+
+.audio-container {
+    padding: 6px 10px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    background-color: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 8px;
+}
+
+.audio-container .audio-player-button {
+    position: relative;
+    height: 28px;
+    width: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+.audio-container .audio-player-button:hover {
+    background: var(--SmartThemeBlurTintColor);
+}
+
+.audio-container .audio-player-button.redOverlayGlow {
+    color: var(--SmartThemeFavor1st);
+    box-shadow: 0 0 8px var(--SmartThemeFavor1st);
+}
+
+.audio-volume {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 100px;
+}
+
+.audio-volume .audio-slider {
+    width: 80px;
+    margin: 0;
+}
+
+.audio-volume-label {
+    font-size: 0.85em;
+    min-width: 24px;
+    text-align: right;
+}
+
+.audio-playlist {
+    flex: 1;
+}
+
+.audio-playlist select {
+    width: 100%;
+    margin: 0 !important;
+    height: 28px;
+}
+
+.audio-mute, .audio-lock, .audio-random {
+    flex-shrink: 0;
+}
+</style>

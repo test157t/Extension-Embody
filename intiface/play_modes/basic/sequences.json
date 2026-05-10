@@ -1,0 +1,254 @@
+{
+  "warmup": {
+    "description": "Gentle warming up pattern",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "gentle",
+        "min": 10,
+        "max": 30,
+        "duration": 5000,
+        "pause": 1000,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      },
+      {
+        "pattern": "wave",
+        "min": 15,
+        "max": 40,
+        "duration": 5000,
+        "pause": 500,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      }
+    ]
+  },
+  "tease": {
+    "description": "Playful teasing pattern",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "teasing",
+        "min": 20,
+        "max": 60,
+        "duration": 8000,
+        "pause": 2000,
+        "cyclesRange": [
+          2,
+          6
+        ]
+      },
+      {
+        "pattern": "tickle",
+        "min": 25,
+        "max": 55,
+        "duration": 4000,
+        "pause": 1500,
+        "cyclesRange": [
+          3,
+          8
+        ]
+      }
+    ]
+  },
+  "pulse": {
+    "description": "Rhythmic pulsing",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "pulse",
+        "min": 30,
+        "max": 70,
+        "duration": 4000,
+        "pause": 1000,
+        "cyclesRange": [
+          2,
+          6
+        ]
+      },
+      {
+        "pattern": "heartbeat",
+        "min": 35,
+        "max": 75,
+        "duration": 6000,
+        "pause": 500,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      }
+    ]
+  },
+  "edge": {
+    "description": "Build to edge",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "ramp_up",
+        "min": 10,
+        "max": 90,
+        "duration": 12000,
+        "pause": 2000,
+        "cyclesRange": [
+          2,
+          6
+        ]
+      },
+      {
+        "pattern": "sine",
+        "min": 70,
+        "max": 95,
+        "duration": 8000,
+        "pause": 1000,
+        "cyclesRange": [
+          1,
+          3
+        ]
+      }
+    ]
+  },
+  "cage_tease": {
+    "description": "Teasing pattern for cages - gentle and frustrating",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "teasing",
+        "min": 5,
+        "max": 40,
+        "duration": 6000,
+        "pause": 2000,
+        "cyclesRange": [
+          2,
+          6
+        ]
+      },
+      {
+        "pattern": "micro_tease",
+        "min": 2,
+        "max": 25,
+        "duration": 5000,
+        "pause": 1500,
+        "cyclesRange": [
+          4,
+          10
+        ]
+      }
+    ]
+  },
+  "cage_denial": {
+    "description": "Denial pattern for cages - keeps them frustrated",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "abrupt_edge",
+        "min": 10,
+        "max": 50,
+        "duration": 4000,
+        "pause": 3000,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      },
+      {
+        "pattern": "micro_tease",
+        "min": 5,
+        "max": 30,
+        "duration": 6000,
+        "pause": 2000,
+        "cyclesRange": [
+          3,
+          8
+        ]
+      }
+    ]
+  },
+  "stroker_slow": {
+    "description": "Slow stroking rhythm",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "crescendo",
+        "min": 20,
+        "max": 70,
+        "duration": 4000,
+        "pause": 1000,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      },
+      {
+        "pattern": "ramp_down",
+        "min": 30,
+        "max": 60,
+        "duration": 3000,
+        "pause": 500,
+        "cyclesRange": [
+          2,
+          4
+        ]
+      }
+    ]
+  },
+  "stroker_fast": {
+    "description": "Fast stroking pattern",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "rapid_fire",
+        "min": 40,
+        "max": 80,
+        "duration": 3000,
+        "pause": 500,
+        "cyclesRange": [
+          4,
+          9
+        ]
+      },
+      {
+        "pattern": "intense_waves",
+        "min": 35,
+        "max": 75,
+        "duration": 4000,
+        "pause": 500,
+        "cyclesRange": [
+          3,
+          7
+        ]
+      }
+    ]
+  },
+  "stroker_edge": {
+    "description": "Edging pattern for strokers",
+    "repeat": false,
+    "steps": [
+      {
+        "pattern": "build_and_ruin",
+        "min": 30,
+        "max": 95,
+        "duration": 5000,
+        "pause": 2000,
+        "cyclesRange": [
+          2,
+          6
+        ]
+      },
+      {
+        "pattern": "held_edge",
+        "min": 40,
+        "max": 90,
+        "duration": 6000,
+        "pause": 1500,
+        "cyclesRange": [
+          2,
+          5
+        ]
+      }
+    ]
+  }
+}

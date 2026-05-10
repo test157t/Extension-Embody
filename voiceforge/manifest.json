@@ -1,0 +1,12 @@
+﻿{
+    "display_name": "VoiceForge",
+    "loading_order": 10,
+    "requires": [],
+    "optional": [],
+    "js": "index.js",
+    "css": "style.css",
+    "author": "Nitral-AI",
+    "version": "4.4.0",
+    "homePage": "https://github.com/test157t/Extension-Voiceforge",
+    "description": "Unified TTS with VoiceForge integration (OmniVoice + Pocket TTS), Call Mode for real-time voice conversation, dynamic BGM/ambient audio, and playback controls"
+}

@@ -1,0 +1,705 @@
+{
+  "name": "intiface_device_profiles",
+  "entries": {
+    "1": {
+      "uid": 1,
+      "key": [
+        "INTIFACE_AI:on"
+      ],
+      "keysecondary": [
+        "INTIFACE_CONN:connected",
+        "INTIFACE_HAS_DEVICES:yes"
+      ],
+      "comment": "Intiface ready state",
+      "content": "Intiface is online and at least one device is available. Treat direct device control as immediately ready. Do not send connect or scan commands unless the user explicitly asks.",
+      "constant": false,
+      "selective": true,
+      "selectiveLogic": 3,
+      "order": 220,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "2": {
+      "uid": 2,
+      "key": [
+        "INTIFACE_CONN:disconnected"
+      ],
+      "comment": "Disconnected baseline",
+      "content": "No active Intiface connection is available. If the user asks for haptics or motion, first acknowledge that execution is currently unavailable, then offer reconnect or scan actions.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 230,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "3": {
+      "uid": 3,
+      "key": [
+        "INTIFACE_DISCONNECT_REASON:ui_manual"
+      ],
+      "comment": "Manual UI disconnect tone",
+      "content": "The user intentionally disconnected in the Intiface UI. Acknowledge with mild annoyance, then wait for user confirmation before attempting reconnect.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 240,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "4": {
+      "uid": 4,
+      "key": [
+        "INTIFACE_DISCONNECT_REASON:unexpected"
+      ],
+      "comment": "Unexpected disconnect recovery",
+      "content": "The disconnect was unexpected. Prefer recovery behavior: explain that reconnect will be attempted automatically and report success or failure clearly.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 250,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "10": {
+      "uid": 10,
+      "key": [
+        "INTIFACE_TYPE:stroker"
+      ],
+      "comment": "Stroker profile",
+      "content": "Stroker profile active. Prefer linear motion patterns for primary rhythm when supported. Use vibrate as accent or fallback.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 180,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "11": {
+      "uid": 11,
+      "key": [
+        "INTIFACE_TYPE:plug"
+      ],
+      "comment": "Plug profile",
+      "content": "Plug profile active. Prefer vibrate or oscillate patterns with smooth ramps. Avoid abrupt high-frequency intensity swings unless the user asks.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 180,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "12": {
+      "uid": 12,
+      "key": [
+        "INTIFACE_TYPE:cage",
+        "Adorime",
+        "Adorime Chastity Cage"
+      ],
+      "comment": "Adorime chastity cage profile",
+      "content": "Adorime chastity cage profile active. Treat this as a cage-mounted vibration stimulation device, not a stroker or thrusting toy. Favor tease-style lower-to-medium intensity changes, short pulses, and controlled pacing over sustained high-output spikes.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 180,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "13": {
+      "uid": 13,
+      "key": [
+        "INTIFACE_TYPE:general"
+      ],
+      "comment": "General profile",
+      "content": "General profile active. Prefer universally supported commands (vibrate/stop) and avoid assumptions about specialized capabilities.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 170,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "300": {
+      "uid": 300,
+      "key": [
+        "Lush 4",
+        "Lush"
+      ],
+      "comment": "Lovense Lush 4 details",
+      "content": "Lush 4 is Bluetooth app-controlled G-spot egg vibrator. Treat as vibration-first with smooth ramps, medium hold segments, and gradual cooldowns.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "301": {
+      "uid": 301,
+      "key": [
+        "Lush Mini"
+      ],
+      "comment": "Lovense Lush Mini details",
+      "content": "Lush Mini is Remote-controlled small G-spot egg vibrator. Use compact-wave vibration patterns and avoid abrupt max starts.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "302": {
+      "uid": 302,
+      "key": [
+        "Lush 3"
+      ],
+      "comment": "Lovense Lush 3 details",
+      "content": "Lush 3 is Bluetooth egg vibrator. Prefer rhythmic vibration waves over bursty command spam.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "303": {
+      "uid": 303,
+      "key": [
+        "Lush 2"
+      ],
+      "comment": "Lovense Lush 2 details",
+      "content": "Lush 2 is Bluetooth egg vibrator (legacy model). Use conservative ramping and explicit stop commands for clean transitions.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "304": {
+      "uid": 304,
+      "key": [
+        "Lush Anal"
+      ],
+      "comment": "Lovense Lush Anal details",
+      "content": "Lush Anal is Remote-control small anal vibrator for beginners. Use gentle ramp-up and lower baseline intensity by default.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "305": {
+      "uid": 305,
+      "key": [
+        "Hush 2",
+        "Hush"
+      ],
+      "comment": "Lovense Hush 2 details",
+      "content": "Hush 2 is App-controlled vibrating butt plug family in multiple sizes. Favor gradual intensity increases and stable mid-range holds.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "306": {
+      "uid": 306,
+      "key": [
+        "Ridge"
+      ],
+      "comment": "Lovense Ridge details",
+      "content": "Ridge is App-controlled vibrating and rotating anal beads. Prefer wave-like pacing and avoid abrupt sustained peaks.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "307": {
+      "uid": 307,
+      "key": [
+        "Domi 2",
+        "Domi"
+      ],
+      "comment": "Lovense Domi 2 details",
+      "content": "Domi 2 is Bluetooth vibrating mini wand. Use stepwise intensity climbs and short peak windows unless max is requested.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "308": {
+      "uid": 308,
+      "key": [
+        "Ferri"
+      ],
+      "comment": "Lovense Ferri details",
+      "content": "Ferri is Wearable magnetic panty vibrator. Default to discreet low-medium pulses with recovery gaps.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "309": {
+      "uid": 309,
+      "key": [
+        "Nora"
+      ],
+      "comment": "Lovense Nora details",
+      "content": "Nora is App-controlled rabbit vibrator with rotating head. When rotation-specific control is unavailable, run vibration-first smooth rhythmic patterns.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "310": {
+      "uid": 310,
+      "key": [
+        "Flexer"
+      ],
+      "comment": "Lovense Flexer details",
+      "content": "Flexer is Bluetooth insertable dual panty vibrator with fingering-style concept. Use teasing wave transitions and avoid hard intensity jumps.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "311": {
+      "uid": 311,
+      "key": [
+        "Dolce"
+      ],
+      "comment": "Lovense Dolce details",
+      "content": "Dolce is Adjustable dual vibrator for blended stimulation. Use balanced medium ramps and avoid prolonged max intensity.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "312": {
+      "uid": 312,
+      "key": [
+        "Osci 3"
+      ],
+      "comment": "Lovense Osci 3 details",
+      "content": "Osci 3 is Remote-controlled heating thumper rabbit vibrator. Favor steady pulse trains with controlled escalation and cooldown.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "313": {
+      "uid": 313,
+      "key": [
+        "Vulse"
+      ],
+      "comment": "Lovense Vulse details",
+      "content": "Vulse is App-controlled vibrating and thrusting G-spot egg vibrator. Prefer smooth thrust rhythm and moderate vibration support where available.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "314": {
+      "uid": 314,
+      "key": [
+        "Spinel"
+      ],
+      "comment": "Lovense Spinel details",
+      "content": "Spinel is Portable thrusting, vibrating, and heating dildo. Use smooth thrust cadence and avoid rapid direction/intensity whiplash.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "315": {
+      "uid": 315,
+      "key": [
+        "Mission 2",
+        "Mission"
+      ],
+      "comment": "Lovense Mission 2 details",
+      "content": "Mission 2 is Vibrating suction cup dildo with touch-sense features. Treat as vibration-first in generic command mode with progressive ramps.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "316": {
+      "uid": 316,
+      "key": [
+        "Gravity"
+      ],
+      "comment": "Lovense Gravity details",
+      "content": "Gravity is Bluetooth automatic thrusting and vibrating dildo. Run consistent thrust cycles with clear acceleration/deceleration phases.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "317": {
+      "uid": 317,
+      "key": [
+        "Lapis"
+      ],
+      "comment": "Lovense Lapis details",
+      "content": "Lapis is App-controlled dual-ended vibrating strapless strap-on. Prefer stable mid-range vibration and smooth transitions.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "318": {
+      "uid": 318,
+      "key": [
+        "Tenera 2"
+      ],
+      "comment": "Lovense Tenera 2 details",
+      "content": "Tenera 2 is App-controlled clitoral suction stimulator. Use gentler pacing by default and avoid long max-output stretches unless requested.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "319": {
+      "uid": 319,
+      "key": [
+        "Ambi"
+      ],
+      "comment": "Lovense Ambi details",
+      "content": "Ambi is Versatile bullet vibrator. Use short rhythmic pulses and medium-range patterns for comfort.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "320": {
+      "uid": 320,
+      "key": [
+        "Hyphy"
+      ],
+      "comment": "Lovense Hyphy details",
+      "content": "Hyphy is Dual-end high-frequency vibrator. Avoid sharp high-frequency spikes; prefer controlled stepped ramps.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "321": {
+      "uid": 321,
+      "key": [
+        "Exomoon"
+      ],
+      "comment": "Lovense Exomoon details",
+      "content": "Exomoon is Bluetooth lipstick bullet vibrator. Keep patterns concise and rhythmically paced for focused stimulation.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "322": {
+      "uid": 322,
+      "key": [
+        "Gemini"
+      ],
+      "comment": "Lovense Gemini details",
+      "content": "Gemini is App-controlled vibrating nipple clamps. Use lower baseline output and cautious ramping due high sensitivity.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "323": {
+      "uid": 323,
+      "key": [
+        "Gush 2",
+        "Gush"
+      ],
+      "comment": "Lovense Gush 2 details",
+      "content": "Gush 2 is Hands-free remote-controlled vibrating and oscillating penis massager. Prefer oscillation-vibration blends with rhythmic waves over abrupt peaks.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "324": {
+      "uid": 324,
+      "key": [
+        "Edge 2",
+        "Edge"
+      ],
+      "comment": "Lovense Edge 2 details",
+      "content": "Edge 2 is App-controlled adjustable prostate massager. Use gentler onset, steady mid-range pacing, and avoid prolonged max holds.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "325": {
+      "uid": 325,
+      "key": [
+        "Diamo"
+      ],
+      "comment": "Lovense Diamo details",
+      "content": "Diamo is Remote-controlled vibrating cock ring. Treat as localized vibration wearable; use steady ramps and brief pulse sets.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "326": {
+      "uid": 326,
+      "key": [
+        "Max 2",
+        "Max"
+      ],
+      "comment": "Lovense Max 2 details",
+      "content": "Max 2 is Interactive male masturbator (vibration-focused in BLE command paths). Use breathing wave patterns and explicit recovery intervals between peaks.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "327": {
+      "uid": 327,
+      "key": [
+        "Calor"
+      ],
+      "comment": "Lovense Calor details",
+      "content": "Calor is Long-distance vibrating pocket masturbator. Use moderate vibration arcs and avoid command flooding.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "328": {
+      "uid": 328,
+      "key": [
+        "Solace"
+      ],
+      "comment": "Lovense Solace details",
+      "content": "Solace is App-controlled hands-free automatic thrusting male stroker. Favor smooth thrust arcs with controlled acceleration and periodic recovery beats.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "329": {
+      "uid": 329,
+      "key": [
+        "Solace Pro"
+      ],
+      "comment": "Lovense Solace Pro details",
+      "content": "Solace Pro is AI-powered remote-control automatic thrusting blowjob machine. Use linear/thrust rhythm with clean cadence; avoid rapid high-amplitude oscillation unless requested.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "330": {
+      "uid": 330,
+      "key": [
+        "Lovense Mini Sex Machine",
+        "Mini Sex Machine"
+      ],
+      "comment": "Lovense Lovense Mini Sex Machine details",
+      "content": "Lovense Mini Sex Machine is App-controlled compact thrusting sex machine. Use conservative thrust speed changes and explicit stop phases.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    },
+    "331": {
+      "uid": 331,
+      "key": [
+        "Lovense Sex Machine",
+        "Sex Machine"
+      ],
+      "comment": "Lovense Lovense Sex Machine details",
+      "content": "Lovense Sex Machine is App-controlled thrusting sex machine. Prefer stable thrust presets, gradual transitions, and clear safety stop behavior.",
+      "constant": false,
+      "selective": false,
+      "selectiveLogic": 0,
+      "order": 265,
+      "position": 0,
+      "disable": false,
+      "addMemo": true,
+      "probability": 100,
+      "useProbability": true
+    }
+  },
+  "extensions": {
+    "intifaceManaged": true,
+    "intifaceVersion": 7,
+    "source": "Extension-Intiface"
+  }
+}

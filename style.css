@@ -1,0 +1,40 @@
+@import url('./voiceforge/style.css');
+@import url('./intiface/style.css');
+@import url('./vrm/style.css');
+
+.embody-settings-root {
+    padding: 10px;
+}
+
+.embody-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 10px;
+}
+
+.embody-tabs {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.embody-tab.active {
+    filter: brightness(1.2);
+    outline: 1px solid var(--SmartThemeQuoteColor);
+}
+
+.embody-panel {
+    display: none;
+}
+
+.embody-panel.active {
+    display: block;
+}
+
+#embody_settings .drawer,
+#embody_settings .drawer-content {
+    display: block;
+}

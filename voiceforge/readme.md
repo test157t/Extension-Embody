@@ -1,0 +1,1 @@
+It's a SillyTavern extension to forge voices, shrimple as that.

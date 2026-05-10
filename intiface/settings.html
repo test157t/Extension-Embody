@@ -1,0 +1,919 @@
+<div id="intiface-connect-button" class="drawer">
+  <div class="drawer-toggle drawer-header">
+    <div class="drawer-icon fa-solid fa-heart-pulse fa-fw closedIcon" title="Intiface Connect"></div>
+  </div>
+  <div class="drawer-content closedDrawer">
+<div class="flex-container alignitemscenter" style="gap: 10px;">
+<h3 class="margin0 flex1">
+<span>Intiface Connect</span>
+<a href="https://intiface.com/" class="notes-link" target="_blank">
+<span class="fa-solid fa-circle-question note-link-span"></span>
+</a>
+</h3>
+</div>
+<div id="intiface-status-panel" class="intiface-status disconnected">Status: Disconnected</div>
+<div id="intiface-ai-status" style="margin-top: 8px; padding: 8px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+<div style="font-size: 0.8em; color: #888; display: flex; align-items: center; justify-content: space-between; gap: 10px;">
+<span><i class="fa-solid fa-robot"></i> <span id="intiface-ai-status-text">AI is ready to control your device via chat commands</span></span>
+<label style="display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 0.9em; white-space: nowrap;">
+<input type="checkbox" id="intiface-ai-enabled" checked>
+<span>AI Device Control</span>
+</label>
+</div>
+<div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.08);">
+<label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.78em; color: #bbb; margin-bottom: 8px;">
+<input type="checkbox" id="intiface-ai-tts-sync-enabled">
+<span>Sync AI commands to VoiceForge spoken chunks</span>
+</label>
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+<label for="intiface-ai-tts-sync-offset" style="font-size: 0.73em; color: #999; min-width: 68px;">Offset</label>
+<input type="range" id="intiface-ai-tts-sync-offset" min="-1500" max="1500" step="50" value="0" style="flex: 1;">
+<span id="intiface-ai-tts-sync-offset-display" style="font-size: 0.72em; color: #64B5F6; min-width: 46px; text-align: right;">0ms</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px;">
+<label for="intiface-ai-tts-sync-timeout" style="font-size: 0.73em; color: #999; min-width: 68px;">Timeout</label>
+<input type="range" id="intiface-ai-tts-sync-timeout" min="300" max="5000" step="100" value="1200" style="flex: 1;">
+<span id="intiface-ai-tts-sync-timeout-display" style="font-size: 0.72em; color: #64B5F6; min-width: 46px; text-align: right;">1200ms</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+<label for="intiface-ai-sync-start-lead" style="font-size: 0.73em; color: #999; min-width: 68px;">Anim lead</label>
+<input type="range" id="intiface-ai-sync-start-lead" min="0" max="3000" step="50" value="1200" style="flex: 1;">
+<span id="intiface-ai-sync-start-lead-display" style="font-size: 0.72em; color: #64B5F6; min-width: 46px; text-align: right;">1200ms</span>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; margin-top: 6px;">
+<label for="intiface-ai-tts-interrupt-policy" style="font-size: 0.73em; color: #999; min-width: 68px;">Interrupt</label>
+<select id="intiface-ai-tts-interrupt-policy" class="text_pole" style="flex: 1; font-size: 0.73em; padding: 4px; height: 26px;">
+<option value="grace">Grace (short hold)</option>
+<option value="flush">Flush immediately</option>
+<option value="preserve">Preserve queue</option>
+</select>
+</div>
+<label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 0.73em; color: #999; margin-top: 8px;">
+<input type="checkbox" id="intiface-debug-logging-enabled">
+<span>Verbose debug logging (chunk/parse sync)</span>
+</label>
+</div>
+</div>
+<div class="flex-container alignitemscenter" style="margin-top: 10px; gap: 8px;">
+<input type="text" id="intiface-ip-input" class="text_pole" value="127.0.0.1:12345" placeholder="127.0.0.1:12345" style="flex: 1; min-width: 120px;">
+<button id="intiface-connect-action-button" class="menu_button connect-button" style="white-space: nowrap;">
+<i class="fa-solid fa-power-off"></i> <span class="btn-text">Connect</span>
+</button>
+<button id="intiface-rescan-button" class="menu_button" style="display: none;">
+<i class="fa-solid fa-rotate"></i>
+</button>
+<label style="display: flex; align-items: center; cursor: pointer; font-size: 0.8em; white-space: nowrap;">
+<input type="checkbox" id="intiface-auto-connect" style="margin-right: 4px;">
+<span>Auto</span>
+</label>
+</div>
+<div id="intiface-devices" style="margin-top: 10px;"></div>
+
+<!-- Play Mode Section - Unified Pattern Control -->
+<div style="margin-top: 15px;">
+<div id="intiface-playmode-menu-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(100,100,255,0.15); border-radius: 4px; border: 1px solid rgba(100,100,255,0.3);">
+<span style="display: flex; justify-content: space-between; align-items: center;">
+<span><i class="fa-solid fa-gamepad"></i> Play Mode</span>
+<span id="intiface-playmode-menu-arrow" style="transition: transform 0.3s;">▼</span>
+</span>
+</div>
+<div id="intiface-playmode-menu-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+
+
+<!-- Pattern Categories -->
+<div style="margin-bottom: 15px;">
+<div style="font-size: 0.85em; color: #aaa; margin-bottom: 10px;">
+<i class="fa-solid fa-layer-group"></i> Pattern Categories
+</div>
+
+  <!-- Category Tabs - Dynamically populated -->
+  <div style="display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px;" id="intiface-playmode-tabs-container">
+    <!-- Tabs will be inserted here by PlayModeLoader -->
+    <div style="color: #666; font-size: 0.8em; width: 100%; text-align: center; padding: 10px;">
+      Loading modes...
+    </div>
+  </div>
+
+<!-- Pattern Configuration Sliders -->
+<div style="margin: 10px 0; padding: 8px; background: rgba(50,50,70,0.2); border-radius: 4px; border: 1px solid rgba(100,100,150,0.2);">
+<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<label style="font-size: 0.75em; color: #64B5F6; white-space: nowrap; width: 70px;">
+<i class="fa-solid fa-clock"></i> Duration:
+</label>
+<input type="range" id="intiface-pattern-duration" min="1000" max="1800000" value="5000" step="500" style="flex: 1;">
+<span id="intiface-pattern-duration-display" style="font-size: 0.75em; color: #64B5F6; min-width: 50px;">5.0s</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<label style="font-size: 0.75em; color: #64B5F6; white-space: nowrap; width: 70px;">
+<i class="fa-solid fa-arrow-down"></i> Min:
+</label>
+<input type="range" id="intiface-pattern-min" min="0" max="100" value="20" style="flex: 1;">
+<span id="intiface-pattern-min-display" style="font-size: 0.75em; color: #64B5F6; min-width: 35px;">20%</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+<label style="font-size: 0.75em; color: #64B5F6; white-space: nowrap; width: 70px;">
+<i class="fa-solid fa-arrow-up"></i> Max:
+</label>
+<input type="range" id="intiface-pattern-max" min="0" max="100" value="80" style="flex: 1;">
+<span id="intiface-pattern-max-display" style="font-size: 0.75em; color: #64B5F6; min-width: 35px;">80%</span>
+</div>
+<div style="display: flex; align-items: center; gap: 10px;">
+<label style="font-size: 0.75em; color: #64B5F6; white-space: nowrap; width: 70px;">
+<i class="fa-solid fa-rotate"></i> Cycles:
+</label>
+<input type="range" id="intiface-pattern-cycles" min="1" max="20" value="3" style="flex: 1;">
+<span id="intiface-pattern-cycles-display" style="font-size: 0.75em; color: #64B5F6; min-width: 35px;">3</span>
+</div>
+<div style="font-size: 0.65em; color: #666; margin-top: 5px; padding-left: 80px;">
+Adjust pattern parameters before placing on timeline
+</div>
+</div>
+
+  <!-- Pattern Buttons Container -->
+  <div id="intiface-pattern-buttons" style="display: flex; flex-wrap: wrap; gap: 5px; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px; min-height: 60px;">
+    <!-- Dynamically populated by PlayModeLoader - starts empty since Basic is selected by default -->
+  </div>
+
+<!-- Timeline Sequencer - Multi-track Pattern Editor -->
+<div id="intiface-timeline-sequencer" style="margin-top: 15px; padding: 10px; background: rgba(30,30,50,0.3); border-radius: 4px; border: 1px solid rgba(100,100,150,0.3);">
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+<div style="font-size: 0.85em; color: #dda0dd;">
+<i class="fa-solid fa-sliders"></i> Timeline Sequencer
+</div>
+<div style="font-size: 0.7em; color: #888; display: flex; gap: 10px;">
+<span>Click pattern → Click timeline to place</span>
+<span style="color: #666;">|</span>
+<span style="color: #ff6464;">Drag to move</span>
+<span style="color: #666;">|</span>
+<span style="color: #ff6464;">Right-click to delete</span>
+</div>
+</div>
+
+<!-- Timeline Header - Time markers -->
+<!-- Note: The scale and track lanes must align perfectly. Track header is 76px wide (60px + 8px padding each side) -->
+<div id="intiface-timeline-header" style="display: flex; align-items: center; margin-bottom: 5px; padding-left: 76px;">
+  <div id="intiface-timeline-scale" style="flex: 1; height: 20px; position: relative; background: rgba(0,0,0,0.2); border-radius: 2px;">
+    <span id="timeline-scale-0" style="position: absolute; left: 0; font-size: 0.6em; color: #666;">0:00</span>
+    <span id="timeline-scale-1" style="position: absolute; left: 25%; font-size: 0.6em; color: #666;">25%</span>
+    <span id="timeline-scale-2" style="position: absolute; left: 50%; font-size: 0.6em; color: #666;">50%</span>
+    <span id="timeline-scale-3" style="position: absolute; left: 75%; font-size: 0.6em; color: #666;">75%</span>
+    <span id="timeline-scale-4" style="position: absolute; right: 0; font-size: 0.6em; color: #666;">100%</span>
+  </div>
+</div>
+
+  <!-- Timeline Tracks -->
+<div id="intiface-timeline-tracks" style="display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; padding-left: 76px;">
+  <!-- Track A -->
+  <div class="timeline-track-container" data-channel="A" style="display: flex; flex-direction: column; border-radius: 3px; border: 1px solid rgba(255,100,100,0.2); overflow: hidden;">
+    <div class="timeline-track-header" style="display: flex; align-items: center; height: 24px; background: rgba(255,100,100,0.1); margin-left: -76px; padding-left: 76px;">
+      <div style="width: 60px; padding: 0 8px; font-size: 0.7em; color: #ff6464; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+        <i class="fa-solid fa-wave-square"></i> A
+      </div>
+      <div style="flex: 1;"></div>
+      <div style="display: flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 0.65em;">
+        <label style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: #888;">
+          <input type="checkbox" id="channel-a-multi-motor" style="margin: 0;">
+          <i class="fa-solid fa-fan" style="font-size: 0.8em;"></i>
+        </label>
+        <input type="number" id="channel-a-motor-count" min="1" max="8" value="2" style="width: 35px; font-size: 0.7em; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 2px; color: #fff; text-align: center; display: none;">
+      </div>
+    </div>
+    <div class="timeline-track-lanes" data-channel="A" style="display: flex; flex-direction: column; flex: 1;">
+      <div class="timeline-track-lane" style="height: 28px; position: relative; background: rgba(0,0,0,0.2); cursor: pointer; border-bottom: 1px solid rgba(255,100,100,0.1);" data-channel="A" data-motor="1"></div>
+    </div>
+  </div>
+        <!-- Track B -->
+        <div class="timeline-track-container" data-channel="B" style="display: flex; flex-direction: column; border-radius: 3px; border: 1px solid rgba(100,255,100,0.2); overflow: hidden;">
+            <div class="timeline-track-header" style="display: flex; align-items: center; height: 24px; background: rgba(100,255,100,0.1);">
+                <div style="width: 60px; padding: 0 8px; font-size: 0.7em; color: #64ff64; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+                    <i class="fa-solid fa-wave-square"></i> B
+                </div>
+                <div style="flex: 1;"></div>
+                <div style="display: flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 0.65em;">
+                    <label style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: #888;">
+                        <input type="checkbox" id="channel-b-multi-motor" style="margin: 0;">
+                        <i class="fa-solid fa-fan" style="font-size: 0.8em;"></i>
+                    </label>
+                    <input type="number" id="channel-b-motor-count" min="1" max="8" value="2" style="width: 35px; font-size: 0.7em; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 2px; color: #fff; text-align: center; display: none;">
+                </div>
+            </div>
+            <div class="timeline-track-lanes" data-channel="B" style="display: flex; flex-direction: column; flex: 1;">
+                <div class="timeline-track-lane" style="height: 28px; position: relative; background: rgba(0,0,0,0.2); cursor: pointer; border-bottom: 1px solid rgba(100,255,100,0.1);" data-channel="B" data-motor="1"></div>
+            </div>
+        </div>
+<!-- Track C -->
+<div class="timeline-track-container" data-channel="C" style="display: flex; flex-direction: column; border-radius: 3px; border: 1px solid rgba(100,100,255,0.2); overflow: hidden;">
+  <div class="timeline-track-header" style="display: flex; align-items: center; height: 24px; background: rgba(100,100,255,0.1); margin-left: -76px; padding-left: 76px;">
+    <div style="width: 60px; padding: 0 8px; font-size: 0.7em; color: #6464ff; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+      <i class="fa-solid fa-wave-square"></i> C
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 0.65em;">
+      <label style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: #888;">
+        <input type="checkbox" id="channel-c-multi-motor" style="margin: 0;">
+        <i class="fa-solid fa-fan" style="font-size: 0.8em;"></i>
+      </label>
+      <input type="number" id="channel-c-motor-count" min="1" max="8" value="2" style="width: 35px; font-size: 0.7em; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 2px; color: #fff; text-align: center; display: none;">
+    </div>
+  </div>
+  <div class="timeline-track-lanes" data-channel="C" style="display: flex; flex-direction: column; flex: 1;">
+    <div class="timeline-track-lane" style="height: 28px; position: relative; background: rgba(0,0,0,0.2); cursor: pointer; border-bottom: 1px solid rgba(100,100,255,0.1);" data-channel="C" data-motor="1"></div>
+  </div>
+</div>
+<!-- Track D -->
+<div class="timeline-track-container" data-channel="D" style="display: flex; flex-direction: column; border-radius: 3px; border: 1px solid rgba(255,0,255,0.2); overflow: hidden;">
+  <div class="timeline-track-header" style="display: flex; align-items: center; height: 24px; background: rgba(255,0,255,0.1); margin-left: -76px; padding-left: 76px;">
+    <div style="width: 60px; padding: 0 8px; font-size: 0.7em; color: #ff00ff; font-weight: bold; display: flex; align-items: center; gap: 5px;">
+      <i class="fa-solid fa-wave-square"></i> D
+    </div>
+    <div style="flex: 1;"></div>
+    <div style="display: flex; align-items: center; gap: 5px; padding: 0 8px; font-size: 0.65em;">
+      <label style="display: flex; align-items: center; gap: 3px; cursor: pointer; color: #888;">
+        <input type="checkbox" id="channel-d-multi-motor" style="margin: 0;">
+        <i class="fa-solid fa-fan" style="font-size: 0.8em;"></i>
+      </label>
+      <input type="number" id="channel-d-motor-count" min="1" max="8" value="2" style="width: 35px; font-size: 0.7em; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 2px; color: #fff; text-align: center; display: none;">
+    </div>
+  </div>
+  <div class="timeline-track-lanes" data-channel="D" style="display: flex; flex-direction: column; flex: 1;">
+    <div class="timeline-track-lane" style="height: 28px; position: relative; background: rgba(0,0,0,0.2); cursor: pointer; border-bottom: 1px solid rgba(255,0,255,0.1);" data-channel="D" data-motor="1"></div>
+  </div>
+</div>
+
+<!-- Timeline Controls -->
+<div style="display: flex; align-items: center; gap: 10px; padding: 8px; background: rgba(0,0,0,0.2); border-radius: 3px;">
+<button id="intiface-timeline-play" class="menu_button" style="padding: 5px 15px; font-size: 0.8em; background: rgba(100,255,100,0.2);">
+<i class="fa-solid fa-play"></i> Play
+</button>
+<button id="intiface-timeline-pause" class="menu_button" style="padding: 5px 15px; font-size: 0.8em; background: rgba(255,165,0,0.2);">
+                <i class="fa-solid fa-pause"></i> Pause
+            </button>
+<div style="flex: 1; display: flex; align-items: center; gap: 5px;">
+<div style="font-size: 0.7em; color: #888;">Time:</div>
+<div id="intiface-timeline-current-time" style="font-size: 0.8em; color: #64B5F6; min-width: 50px;">0.0s</div>
+<input type="range" id="intiface-timeline-scrubber" min="0" max="30000" value="0" style="flex: 1;" title="Scrub timeline">
+            <div id="intiface-timeline-end-time" style="font-size: 0.7em; color: #888;">30s</div>
+</div>
+<button id="intiface-timeline-clear" class="menu_button" style="padding: 5px 10px; font-size: 0.75em;">
+<i class="fa-solid fa-trash"></i>
+</button>
+</div>
+
+<!-- Selected Pattern Indicator -->
+<div id="intiface-timeline-selected" style="margin-top: 8px; padding: 8px; background: rgba(100,150,255,0.1); border-radius: 3px; font-size: 0.75em; color: #888; display: none;">
+<i class="fa-solid fa-hand-pointer"></i> <span id="intiface-timeline-selected-text">Click a pattern above, then click on a timeline track to place it</span>
+</div>
+</div>
+</div>
+
+<!-- AI Mode Toggles -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+<div id="intiface-ai-modes-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+<span style="display: flex; justify-content: space-between; align-items: center;">
+<span style="font-size: 0.85em; color: #aaa;">
+<i class="fa-solid fa-robot"></i> AI Play Modes
+</span>
+<span id="intiface-ai-modes-arrow" style="transition: transform 0.3s;">▼</span>
+</span>
+</div>
+<div id="intiface-ai-modes-content" style="display: none; margin-top: 10px;">
+<div style="font-size: 0.75em; color: #888; margin-bottom: 8px;">
+Enable which modes AI can use:
+</div>
+
+<!-- AI Mode Toggles - Dynamically populated -->
+<div style="display: flex; flex-wrap: wrap; gap: 8px;" id="intiface-playmode-toggles-container">
+<!-- Toggles will be inserted here by PlayModeLoader -->
+<div style="color: #888; font-size: 0.8em; width: 100%; text-align: center; padding: 10px;">
+Loading mode toggles...
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<div id="intiface-mode-menu-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+<div style="font-size: 0.85em; color: #888; margin-bottom: 10px;">
+<i class="fa-solid fa-info-circle"></i> AI modes are controlled via the toggles above
+</div>
+</div>
+
+<!-- Mode Intensity Multipliers -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+<div id="intiface-intensity-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+<span style="display: flex; justify-content: space-between; align-items: center;">
+<span style="font-size: 0.85em; color: #aaa;">
+<i class="fa-solid fa-sliders"></i> Mode Intensity Multipliers (50%-400%)
+</span>
+<span id="intiface-intensity-arrow" style="transition: transform 0.3s;">▼</span>
+</span>
+</div>
+<div id="intiface-intensity-content" style="display: none; margin-top: 10px;">
+<!-- Intensity Sliders - Dynamically populated -->
+<div id="intiface-playmode-intensity-container">
+<!-- Intensity sliders will be inserted here by PlayModeLoader -->
+<div style="color: #888; font-size: 0.8em; text-align: center; padding: 10px;">
+Loading intensity controls...
+</div>
+</div>
+
+<button id="intiface-reset-mode-intensities" class="menu_button" style="width: 100%; margin-top: 10px; padding: 6px; font-size: 0.75em;">
+<i class="fa-solid fa-rotate-left"></i> Reset All to 100%
+</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Custom Mode Builder -->
+<div style="margin-top: 15px;">
+<div id="intiface-mode-builder-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(100,50,200,0.15); border-radius: 4px; border: 1px solid rgba(100,50,200,0.3);">
+<span style="display: flex; justify-content: space-between; align-items: center;">
+<span><i class="fa-solid fa-wand-magic-sparkles"></i> Mode Builder</span>
+<span id="intiface-mode-builder-arrow" style="transition: transform 0.3s;">▼</span>
+</span>
+</div>
+<div id="intiface-mode-builder-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+<div style="font-size: 0.85em; color: #aaa; margin-bottom: 10px;">
+<i class="fa-solid fa-hammer"></i> Create Custom Play Modes
+</div>
+<div style="font-size: 0.75em; color: #888; margin-bottom: 10px;">
+Design new play modes with custom patterns and sequences.
+</div>
+
+<!-- Mode List -->
+<div id="intiface-custom-modes-list" style="margin-top: 15px;">
+<div style="color: #666; font-size: 0.8em; text-align: center; padding: 10px;">
+<i class="fa-solid fa-circle-info"></i> Custom modes will appear here
+</div>
+</div>
+
+<!-- Create New Mode Button -->
+<button id="intiface-create-mode-btn" class="menu_button" style="width: 100%; margin-bottom: 10px; background: rgba(100,150,255,0.2);">
+<i class="fa-solid fa-plus"></i> Create New Mode
+</button>
+
+<!-- Mode Editor (hidden by default) -->
+<div id="intiface-mode-editor" style="display: none; margin-top: 15px; padding: 15px; background: rgba(0,0,0,0.1); border-radius: 4px; border: 1px solid rgba(100,150,255,0.3);">
+<div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px; color: #64B5F6;">
+<i class="fa-solid fa-pen-to-square"></i> Edit Mode
+</div>
+
+<!-- Mode Metadata -->
+<input type="hidden" id="intiface-mode-id">
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">Display Name <button class="menu_button mode-ai-wand" data-target="#intiface-mode-name" data-kind="display_name" style="padding: 1px 6px; font-size: 0.68em; background: rgba(160,120,255,0.25);"><i class="fa-solid fa-wand-magic-sparkles"></i></button></label>
+<input type="text" id="intiface-mode-name" class="text_pole" placeholder="My Custom Mode" style="width: 100%; font-size: 0.8em;">
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">Personality <button class="menu_button mode-ai-wand" data-target="#intiface-mode-personality" data-kind="personality" style="padding: 1px 6px; font-size: 0.68em; background: rgba(160,120,255,0.25);"><i class="fa-solid fa-wand-magic-sparkles"></i></button></label>
+<input type="text" id="intiface-mode-personality" class="text_pole" placeholder="e.g., Cruel, teasing, dominant" style="width: 100%; font-size: 0.8em;">
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">Description <button class="menu_button mode-ai-wand" data-target="#intiface-mode-description" data-kind="description" style="padding: 1px 6px; font-size: 0.68em; background: rgba(160,120,255,0.25);"><i class="fa-solid fa-wand-magic-sparkles"></i></button></label>
+<textarea id="intiface-mode-description" class="text_pole" placeholder="Describe what this mode does..." style="width: 100%; font-size: 0.8em; min-height: 60px; resize: vertical;"></textarea>
+</div>
+
+<!-- AI Prompt Editor -->
+<div style="margin-bottom: 10px;">
+<div style="font-size: 0.8em; font-weight: bold; margin-bottom: 8px; color: #a0a0ff;">
+<i class="fa-solid fa-robot"></i> AI Prompts
+</div>
+<div style="font-size: 0.7em; color: #888; margin-bottom: 8px;">
+Instructions for AI to use this mode.
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px;">System Prompt <button class="menu_button mode-ai-wand" data-target="#intiface-mode-system-prompt" data-kind="system_prompt" style="padding: 1px 6px; font-size: 0.68em; background: rgba(160,120,255,0.25);"><i class="fa-solid fa-wand-magic-sparkles"></i></button></label>
+<textarea id="intiface-mode-system-prompt" class="text_pole" placeholder="You are a..." style="width: 100%; font-size: 0.8em; min-height: 80px; resize: vertical;"></textarea>
+</div>
+
+<div style="margin-bottom: 10px; font-size: 0.65em; color: #888;">
+Activation trigger is generated automatically as <code>/ifmode mode=&lt;mode_id&gt;</code>
+</div>
+
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: block; margin-bottom: 3px;">Icon (FontAwesome class)</label>
+<div style="display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center;">
+<select id="intiface-mode-icon" class="text_pole" style="width: 100%; font-size: 0.8em;">
+  <option value="fa-star">Star</option>
+  <option value="fa-heart">Heart</option>
+  <option value="fa-bolt">Bolt</option>
+  <option value="fa-fire">Fire</option>
+  <option value="fa-moon">Moon</option>
+  <option value="fa-cloud-moon">Cloud Moon</option>
+  <option value="fa-robot">Robot</option>
+  <option value="fa-wave-square">Wave</option>
+  <option value="fa-magic">Magic</option>
+  <option value="fa-hurricane">Hurricane</option>
+  <option value="fa-skull">Skull</option>
+  <option value="fa-crown">Crown</option>
+  <option value="fa-gem">Gem</option>
+  <option value="fa-music">Music</option>
+  <option value="fa-bullseye">Bullseye</option>
+</select>
+<span id="intiface-mode-icon-preview" style="font-size: 1.1em; color: #64B5F6; min-width: 20px; text-align: center;"><i class="fa-solid fa-star"></i></span>
+</div>
+<div style="font-size: 0.65em; color: #888; margin-top: 2px;">Choose an icon for tabs/toggles</div>
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: block; margin-bottom: 3px;">Color</label>
+<input type="color" id="intiface-mode-color" value="#6464ff" style="width: 100%; height: 30px; border: none; border-radius: 3px;">
+</div>
+
+<div style="margin-bottom: 10px;">
+<label style="font-size: 0.75em; display: block; margin-bottom: 3px;">Intensity Multiplier</label>
+<input type="range" id="intiface-mode-multiplier" min="0.5" max="2.0" step="0.1" value="1.0" style="width: 100%;">
+<span id="intiface-mode-multiplier-display" style="font-size: 0.7em; color: #64B5F6;">1.0x</span>
+</div>
+
+<!-- Pattern Editor -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+<div style="font-size: 0.8em; font-weight: bold; margin-bottom: 8px; color: #ffa0a0;">
+<i class="fa-solid fa-wave-square"></i> Waveform Patterns
+</div>
+<div style="font-size: 0.7em; color: #888; margin-bottom: 8px;">
+Define mathematical patterns (JavaScript functions).
+</div>
+
+<div id="intiface-patterns-list" style="margin-bottom: 10px;">
+<!-- Dynamic pattern entries -->
+</div>
+
+<button id="intiface-add-pattern-btn" class="menu_button" style="width: 100%; font-size: 0.75em; padding: 5px; background: rgba(255,100,100,0.1);">
+<i class="fa-solid fa-plus"></i> Add Pattern
+</button>
+</div>
+
+<!-- Sequence Editor -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+<div style="font-size: 0.8em; font-weight: bold; margin-bottom: 8px; color: #a0ffa0;">
+<i class="fa-solid fa-list-ol"></i> Sequences
+</div>
+<div style="font-size: 0.7em; color: #888; margin-bottom: 8px;">
+Create predefined step sequences.
+</div>
+
+<div id="intiface-sequences-list" style="margin-bottom: 10px;">
+<!-- Dynamic sequence entries -->
+</div>
+
+<button id="intiface-add-sequence-btn" class="menu_button" style="width: 100%; font-size: 0.75em; padding: 5px; background: rgba(100,255,100,0.1);">
+<i class="fa-solid fa-plus"></i> Add Sequence
+</button>
+</div>
+
+<!-- Actions -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 10px;">
+<button id="intiface-save-mode-btn" class="menu_button" style="flex: 1; background: rgba(100,255,100,0.2);">
+<i class="fa-solid fa-save"></i> Save Mode
+</button>
+<button id="intiface-cancel-mode-btn" class="menu_button" style="flex: 1; background: rgba(255,100,100,0.2);">
+<i class="fa-solid fa-times"></i> Cancel
+</button>
+</div>
+
+<div style="margin-top: 10px; font-size: 0.7em; color: #888; font-style: italic;">
+<i class="fa-solid fa-info-circle"></i> Custom modes are stored in your browser. Export to save permanently.
+</div>
+</div>
+
+<!-- Export/Import -->
+<div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1); display: flex; gap: 10px;">
+<button id="intiface-export-modes-btn" class="menu_button" style="flex: 1; font-size: 0.75em;">
+<i class="fa-solid fa-download"></i> Export All
+</button>
+<button id="intiface-import-modes-btn" class="menu_button" style="flex: 1; font-size: 0.75em;">
+<i class="fa-solid fa-upload"></i> Import
+</button>
+</div>
+<input type="file" id="intiface-import-file" accept=".json" style="display: none;">
+</div>
+</div>
+
+
+<!-- Media Player Section in Menu -->
+    <div style="margin-top: 15px;">
+      <div id="intiface-media-menu-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+        <span style="display: flex; justify-content: space-between; align-items: center;">
+          <span><i class="fa-solid fa-film"></i> Media Library</span>
+          <span id="intiface-media-menu-arrow" style="transition: transform 0.3s;">▼</span>
+        </span>
+      </div>
+      <div id="intiface-media-menu-content" style="display: none; margin-top: 10px;">
+        <div style="display: grid; grid-template-columns: 1fr auto auto auto; gap: 8px; margin-bottom: 10px; align-items: center;">
+          <input type="text" id="intiface-menu-media-search" class="text_pole" placeholder="Search media..." style="font-size: 0.8em;">
+          <select id="intiface-menu-media-type" class="text_pole" style="font-size: 0.8em; min-width: 90px;">
+            <option value="all">All</option>
+            <option value="video">Video</option>
+            <option value="audio">Audio</option>
+          </select>
+          <select id="intiface-menu-media-sort" class="text_pole" style="font-size: 0.8em; min-width: 120px;">
+            <option value="name-asc">A-Z</option>
+            <option value="name-desc">Z-A</option>
+            <option value="date-desc">Newest</option>
+            <option value="date-asc">Oldest</option>
+            <option value="size-desc">Size (largest)</option>
+            <option value="size-asc">Size (smallest)</option>
+            <option value="duration-desc">Length (longest)</option>
+            <option value="duration-asc">Length (shortest)</option>
+          </select>
+          <button id="intiface-menu-refresh-media-btn" class="menu_button" title="Refresh media list" style="padding: 6px 10px; font-size: 0.8em; min-width: 38px; white-space: nowrap;">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+        </div>
+        
+        <!-- Media List -->
+        <div id="intiface-menu-media-list" style="max-height: 250px; overflow-y: auto; border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 5px;">
+          <div style="color: #888; font-size: 0.85em; text-align: center; padding: 20px;">
+            Click refresh to load media files
+          </div>
+        </div>
+        
+      <!-- Help Text -->
+      <div style="margin-top: 10px; padding: 8px; background: rgba(100,100,100,0.1); border-radius: 4px; font-size: 0.75em; color: #888;">
+        <strong>Folders:</strong><br>
+        Media: <code>data/default-user/assets/intiface/media/</code><br>
+        Funscripts: <code>data/default-user/assets/intiface/funscript/</code><br>
+        Playmodes: <code>data/default-user/assets/intiface/playmodes/</code><br>
+        <em>Supports: MP4, WebM, MKV, AVI, MOV + MP3, WAV, OGG, FLAC, M4A<br>
+        Funscripts must match media filenames</em>
+      </div>
+      </div>
+    </div>
+
+    <!-- Funscript Editor Section in Menu -->
+    <div style="margin-top: 15px;">
+      <div id="intiface-funscript-editor-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+        <span style="display: flex; justify-content: space-between; align-items: center;">
+          <span><i class="fa-solid fa-pen-ruler"></i> Funscript Editor</span>
+          <span id="intiface-funscript-editor-arrow" style="transition: transform 0.3s;">▼</span>
+        </span>
+      </div>
+      <div id="intiface-funscript-editor-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+        <div style="display: grid; grid-template-columns: 1fr auto auto; gap: 8px; margin-bottom: 8px; align-items: center;">
+          <select id="intiface-funscript-editor-file" class="text_pole" style="font-size: 0.8em;">
+            <option value="">Select a funscript...</option>
+          </select>
+          <button id="intiface-funscript-editor-refresh" class="menu_button" style="padding: 6px 10px; font-size: 0.78em;">
+            <i class="fa-solid fa-rotate"></i>
+          </button>
+          <button id="intiface-funscript-editor-load" class="menu_button" style="padding: 6px 10px; font-size: 0.78em;">
+            Load
+          </button>
+        </div>
+
+        <div style="margin-bottom: 8px; border: 1px solid rgba(255,255,255,0.12); border-radius: 4px; padding: 6px; background: rgba(0,0,0,0.18);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <div style="font-size: 0.7em; color: #9aa;">Before + Draft Overlay</div>
+            <div style="font-size: 0.68em; color: #9aa; display: flex; gap: 10px;">
+              <span><i class="fa-solid fa-minus" style="color: #FF8A00;"></i> Before</span>
+              <span><i class="fa-solid fa-minus" style="color: #00B7FF;"></i> Draft/Current</span>
+            </div>
+          </div>
+          <canvas id="intiface-funscript-wave-compare" width="520" height="140" style="width: 100%; height: 140px; display:block;"></canvas>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+          <button id="intiface-funscript-editor-accept" class="menu_button" style="font-size: 0.73em; padding: 4px 8px; background: rgba(100,255,100,0.2);" disabled>
+            <i class="fa-solid fa-check"></i> Save Draft
+          </button>
+          <button id="intiface-funscript-editor-discard" class="menu_button" style="font-size: 0.73em; padding: 4px 8px; background: rgba(255,120,120,0.2);" disabled>
+            <i class="fa-solid fa-xmark"></i> Discard Draft
+          </button>
+          <button id="intiface-funscript-editor-toggle-json" class="menu_button" style="font-size: 0.73em; padding: 4px 8px;">
+            <i class="fa-solid fa-code"></i> Show JSON
+          </button>
+        </div>
+
+        <textarea id="intiface-funscript-editor-json" class="text_pole" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" style="display: none; width: 100%; min-height: 180px; resize: vertical; font-family: Consolas, monospace; font-size: 0.75em; line-height: 1.35; font-variant-ligatures: none; contain: content;" placeholder="Load a funscript to edit JSON..."></textarea>
+
+        <div style="margin-top: 8px; border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 8px; background: rgba(255,255,255,0.02);">
+          <label style="font-size: 0.72em; display: block; margin-bottom: 6px; color: #bbb;">Programmatic Tools</label>
+
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px; align-items: start;">
+            <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 6px; background: rgba(0,0,0,0.14);">
+              <div style="display: grid; gap: 6px;">
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-smooth" type="checkbox" checked title="Include smooth step">
+                  <label style="font-size: 0.7em; color: #aaa;">Smooth</label>
+                  <input id="intiface-funscript-editor-smooth-window" class="text_pole" type="number" min="1" max="101" step="1" value="5" style="width: 100%; font-size: 0.72em;" title="Moving-average window size">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-scale" type="checkbox" title="Include scale step">
+                  <label style="font-size: 0.7em; color: #aaa;">Scale %</label>
+                  <input id="intiface-funscript-editor-scale-percent" class="text_pole" type="number" min="0" max="500" step="1" value="100" style="width: 100%; font-size: 0.72em;" title="Position multiplier in percent">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-clamp" type="checkbox" title="Include clamp step">
+                  <label style="font-size: 0.7em; color: #aaa;">Clamp</label>
+                  <div style="display: grid; grid-template-columns: 1fr auto 1fr; gap: 6px; align-items: center;">
+                    <input id="intiface-funscript-editor-clamp-min" class="text_pole" type="number" min="0" max="100" step="1" value="0" style="width: 100%; font-size: 0.72em;" title="Min position">
+                    <span style="font-size: 0.72em; color: #777;">to</span>
+                    <input id="intiface-funscript-editor-clamp-max" class="text_pole" type="number" min="0" max="100" step="1" value="100" style="width: 100%; font-size: 0.72em;" title="Max position">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-shift" type="checkbox" title="Include shift step">
+                  <label style="font-size: 0.7em; color: #aaa;">Shift ms</label>
+                  <input id="intiface-funscript-editor-shift-ms" class="text_pole" type="number" min="-20000" max="20000" step="1" value="0" style="width: 100%; font-size: 0.72em;" title="Time shift in milliseconds">
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-ramp" type="checkbox" title="Include ramp step">
+                  <label style="font-size: 0.7em; color: #aaa;">Ramps ms</label>
+                  <div style="display: grid; grid-template-columns: auto 1fr auto 1fr; gap: 6px; align-items: center;">
+                    <span style="font-size: 0.7em; color: #777;">in</span>
+                    <input id="intiface-funscript-editor-ramp-in-ms" class="text_pole" type="number" min="0" max="120000" step="1" value="0" style="width: 100%; font-size: 0.72em;" title="Lead-in ramp in milliseconds">
+                    <span style="font-size: 0.7em; color: #777;">out</span>
+                    <input id="intiface-funscript-editor-ramp-out-ms" class="text_pole" type="number" min="0" max="120000" step="1" value="0" style="width: 100%; font-size: 0.72em;" title="Lead-out ramp in milliseconds">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-decimate" type="checkbox" checked title="Include decimate step">
+                  <label style="font-size: 0.7em; color: #aaa;">Decimate</label>
+                  <div style="display: grid; grid-template-columns: auto 1fr; gap: 6px; align-items: center;">
+                    <span style="font-size: 0.7em; color: #777;">gap ms</span>
+                    <input id="intiface-funscript-editor-decimate-gap-ms" class="text_pole" type="number" min="1" max="5000" step="1" value="40" style="width: 100%; font-size: 0.72em;" title="Minimum time gap between kept actions">
+                  </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 18px 70px 1fr; gap: 6px; align-items: center;">
+                  <input id="intiface-funscript-editor-use-normalize" type="checkbox" checked title="Include normalize step">
+                  <label style="font-size: 0.7em; color: #aaa;">Normalize</label>
+                  <div style="font-size: 0.7em; color: #777;">Map to full 0-100 range</div>
+                </div>
+
+                <div style="display: flex; justify-content: flex-end; margin-top: 2px;">
+                  <button id="intiface-funscript-editor-apply-selected" class="menu_button" style="font-size: 0.74em; padding: 5px 9px;">
+                    <i class="fa-solid fa-sliders"></i> Apply Selected
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div style="border: 1px solid rgba(255,255,255,0.08); border-radius: 4px; padding: 6px; background: rgba(0,0,0,0.14);">
+              <div style="display: grid; gap: 6px;">
+                <div style="font-size: 0.7em; color: #aaa;">Device Tuning</div>
+
+                <div style="display: grid; grid-template-columns: 98px 1fr auto; gap: 6px; align-items: center;">
+                  <label style="font-size: 0.7em; color: #888;">Target Device</label>
+                  <select id="intiface-funscript-editor-device-profile" class="text_pole" style="font-size: 0.72em; min-width: 0; width: 100%;">
+                    <option value="auto">Auto (connected device)</option>
+                    <option value="linear">Linear / Stroker</option>
+                    <option value="vibrate">Vibrator</option>
+                    <option value="oscillate">Oscillator</option>
+                    <option value="plug">Plug (thrusty/impact)</option>
+                    <option value="cage">Cage (teasing/deny)</option>
+                    <option value="general">General</option>
+                  </select>
+                  <button id="intiface-funscript-editor-apply-optimize" class="menu_button" style="font-size: 0.72em; padding: 4px 7px;" title="Apply the selected device tuning preset"><i class="fa-solid fa-gauge-high"></i> Apply</button>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 98px 1fr auto; gap: 8px; align-items: center;">
+                  <label style="font-size: 0.7em; color: #888;">Tuning Strength</label>
+                  <input id="intiface-funscript-editor-optimize-intensity" type="range" min="50" max="180" value="100" step="1" style="width: 100%; min-width: 120px;">
+                  <span id="intiface-funscript-editor-optimize-intensity-display" style="font-size: 0.7em; color: #9aa; min-width: 84px; text-align: right;">100% (Balanced)</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top: 8px;">
+          <label style="font-size: 0.72em; display: block; margin-bottom: 4px; color: #bbb;">AI Edit Instructions</label>
+          <textarea id="intiface-funscript-editor-ai-instructions" class="text_pole" spellcheck="false" autocapitalize="off" autocomplete="off" autocorrect="off" style="width: 100%; min-height: 68px; resize: vertical; font-size: 0.74em;" placeholder="e.g. smooth the first 30 seconds, reduce peaks over 85, add gentle lead-in"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 8px; margin-top: 8px;">
+          <button id="intiface-funscript-editor-format" class="menu_button" style="font-size: 0.75em; padding: 5px 8px;">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Format
+          </button>
+          <button id="intiface-funscript-editor-ai-edit" class="menu_button" style="font-size: 0.75em; padding: 5px 8px; background: rgba(160,120,255,0.24);">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> AI Edit
+          </button>
+          <button id="intiface-funscript-editor-save" class="menu_button" style="font-size: 0.75em; padding: 5px 8px; background: rgba(100,255,100,0.2);">
+            <i class="fa-solid fa-save"></i> Save
+          </button>
+        </div>
+
+        <div id="intiface-funscript-editor-status" style="margin-top: 6px; font-size: 0.72em; color: #888;">Editor ready</div>
+      </div>
+    </div>
+
+    <!-- Funscript Settings Section -->
+    <div style="margin-top: 15px;">
+      <div id="intiface-funscript-menu-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+        <span style="display: flex; justify-content: space-between; align-items: center;">
+          <span><i class="fa-solid fa-chart-line"></i> Playback Settings</span>
+          <span id="intiface-funscript-menu-arrow" style="transition: transform 0.3s;">▼</span>
+        </span>
+      </div>
+<div id="intiface-funscript-menu-content" style="display: none; margin-top: 10px;">
+<!-- Sync Settings -->
+<div style="margin-top: 15px; padding: 10px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+<div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px;">
+<i class="fa-solid fa-sliders"></i> Sync Settings
+</div>
+
+          <div style="margin-bottom: 15px;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 5px;">
+              <span>Sync Offset</span>
+              <span id="intiface-menu-sync-display" style="color: #64B5F6;">0ms</span>
+            </div>
+            <input type="range" id="intiface-menu-sync-offset" min="-5000" max="5000" value="0" style="width: 100%;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+              <span>-5s</span>
+              <span>+5s</span>
+            </div>
+          </div>
+
+          <div>
+<div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 5px;">
+  <span>Intensity (0-400%)</span>
+  <span id="intiface-menu-intensity-display" style="color: #4CAF50;">100%</span>
+</div>
+<input type="range" id="intiface-menu-intensity" min="0" max="400" value="100" style="width: 100%;">
+<div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+  <span>0%</span>
+  <span>400%</span>
+</div>
+          </div>
+
+      <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <label style="font-size: 0.8em; display: flex; align-items: center; cursor: pointer;">
+          <input type="checkbox" id="intiface-menu-loop" style="margin-right: 8px;">
+          <i class="fa-solid fa-repeat" style="margin-right: 5px; color: #888;"></i>
+          Loop video
+        </label>
+      </div>
+
+      <!-- Global Intensity -->
+      <div style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.1);">
+        <div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 5px;">
+          <span><i class="fa-solid fa-sliders"></i> Global Intensity</span>
+          <span id="intiface-global-intensity-display" style="color: #64B5F6;">100%</span>
+        </div>
+        <input type="range" id="intiface-global-intensity" min="10" max="400" value="100" style="width: 100%;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+          <span>10%</span>
+          <span>400%</span>
+        </div>
+    </div>
+
+    <!-- Device Polling Rate -->
+    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+      <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px;">
+        <i class="fa-solid fa-tachometer-alt"></i> Device Polling Rate
+      </div>
+      <div style="margin-bottom: 10px;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 3px;">
+          <span>Polling Rate (Hz)</span>
+          <span id="intiface-polling-rate-display" style="color: #64B5F6;">30Hz</span>
+        </div>
+        <input type="range" id="intiface-polling-rate" min="10" max="60" value="30" step="1" style="width: 100%;">
+        <div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+          <span>10Hz</span>
+          <span>60Hz</span>
+        </div>
+      </div>
+      <div style="font-size: 0.7em; color: #888; margin-top: 5px; font-style: italic;">
+        Lower = less device spam, better battery. Higher = smoother playback, more responsive.
+        <br><strong>10-20Hz:</strong> Power saving | <strong>30Hz:</strong> Balanced (default) | <strong>60Hz:</strong> Maximum smoothness
+      </div>
+    </div>
+
+    <!-- Output Inversion -->
+    <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+      <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px;">
+        <i class="fa-solid fa-rotate"></i> Output Inversion
+      </div>
+      <label style="font-size: 0.8em; display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
+        <input type="checkbox" id="intiface-global-invert" style="margin-right: 8px;">
+        <span style="color: #bbb;">Invert All Device Output (0% ↔ 100%)</span>
+      </label>
+      <div id="intiface-global-invert-status" style="font-size: 0.7em; color: #888; margin-top: 5px; display: none;">
+        <i class="fa-solid fa-rotate" style="color: #64B5F6;"></i> Inversion active - funscripts, patterns & commands reversed
+      </div>
+      <div style="font-size: 0.7em; color: #888; margin-top: 5px; font-style: italic;">
+        Reverses all intensity values for all devices. Useful if your device responds backwards to commands.
+      </div>
+</div>
+</div>
+
+<!-- Player Appearance Settings -->
+<div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+<div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px;">
+<i class="fa-solid fa-palette"></i> Player Appearance
+</div>
+
+<div style="margin-bottom: 12px;">
+<div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 3px;">
+<span>Video Opacity</span>
+<span id="intiface-menu-video-opacity-display" style="color: #64B5F6;">100%</span>
+</div>
+<input type="range" id="intiface-menu-video-opacity" min="20" max="100" value="100" style="width: 100%;">
+<div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+<span>20%</span>
+<span>100%</span>
+</div>
+</div>
+
+<div style="margin-bottom: 12px;">
+<div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 3px;">
+<span>Player Scale</span>
+<span id="intiface-menu-width-display" style="color: #64B5F6;">1.0x</span>
+</div>
+<input type="range" id="intiface-menu-width" min="20" max="100" value="100" style="width: 100%;">
+<div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+<span>0.2x</span>
+<span>1.0x</span>
+</div>
+</div>
+
+<div style="margin-bottom: 10px;">
+<div style="font-size: 0.75em; margin-bottom: 5px;">Player Position</div>
+<select id="intiface-menu-position" style="width: 100%; padding: 4px; font-size: 0.8em; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.2); border-radius: 3px; color: inherit;">
+<option value="top">Top of chat</option>
+<option value="center">Center screen</option>
+</select>
+</div>
+
+<div style="margin-bottom: 12px;">
+<div style="display: flex; justify-content: space-between; font-size: 0.75em; margin-bottom: 3px;">
+<span>Z-Index (stacking order)</span>
+<span id="intiface-menu-zindex-display" style="color: #64B5F6;">1</span>
+</div>
+<input type="range" id="intiface-menu-zindex" min="1" max="100" value="1" style="width: 100%;">
+<div style="display: flex; justify-content: space-between; font-size: 0.65em; color: #666; margin-top: 2px;">
+<span>1</span>
+<span>100</span>
+</div>
+<div style="font-size: 0.65em; color: #888; margin-top: 3px; font-style: italic;">
+Higher values appear above other elements
+</div>
+</div>
+
+<div>
+<button id="intiface-reset-appearance-btn" class="menu_button" style="width: 100%; font-size: 0.75em; padding: 5px;">
+<i class="fa-solid fa-rotate-left"></i> Reset to defaults
+</button>
+</div>
+</div>
+</div>
+</div>
+
+<!-- Advanced Configuration (Collapsed by default) -->
+    <div style="margin-top: 15px;">
+      <div id="intiface-advanced-toggle" class="menu_button" style="width: 100%; text-align: left; padding: 8px; background: rgba(0,0,0,0.1); border-radius: 4px;">
+        <span style="display: flex; justify-content: space-between; align-items: center;">
+          <span>Advanced Configuration</span>
+          <span id="intiface-advanced-arrow" style="transition: transform 0.3s;">▼</span>
+        </span>
+      </div>
+      <div id="intiface-advanced-content" style="display: none; margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.05); border-radius: 4px;">
+        <div style="font-size: 0.85em; color: #aaa; margin-bottom: 8px;">
+          Path to IntifaceCentral.exe (allows AI to auto-start)
+        </div>
+        <div class="flex-container alignitemscenter" style="gap: 8px;">
+          <input type="text" id="intiface-exe-path" class="text_pole" placeholder="C:\Program Files\Intiface\IntifaceCentral.exe" style="flex-grow: 1;">
+          <button id="intiface-exe-browse" class="menu_button" style="white-space: nowrap; padding: 6px 10px;">
+            <i class="fa-solid fa-folder-open"></i> Browse
+          </button>
+        </div>
+        <div id="intiface-exe-status" style="margin-top: 5px; font-size: 0.75em; color: #888;">Not configured</div>
+                <div style="margin-top: 5px; font-size: 0.7em; color: #666; font-style: italic;">
+                    Type the full path to IntifaceCentral.exe
+                </div>
+
+                <!-- WebSocket Proxy Settings -->
+                <div style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);">
+                    <div style="font-size: 0.85em; font-weight: bold; margin-bottom: 10px;">
+                        <i class="fa-solid fa-network-wired"></i> WebSocket Proxy
+                    </div>
+                    <label style="font-size: 0.8em; display: flex; align-items: center; cursor: pointer; margin-bottom: 8px;">
+                        <input type="checkbox" id="intiface-use-internal-proxy" style="margin-right: 8px;">
+                        <i class="fa-solid fa-server" style="margin-right: 5px; color: #64B5F6;"></i>
+                        Use Internal Proxy (for HTTPS access)
+                    </label>
+                    <div style="font-size: 0.7em; color: #888; margin-top: 5px; font-style: italic;">
+                        Forwards local Intiface connection through secure WebSocket proxy. Required when accessing SillyTavern via HTTPS.
+                    </div>
+<div id="intiface-proxy-status" style="font-size: 0.75em; color: #888; margin-top: 8px; display: none;">
+        <i class="fa-solid fa-circle" style="color: #4CAF50; font-size: 0.6em; margin-right: 5px;"></i>
+Proxy running on port 12346
+</div>
+</div>
+
+</div>
+</div>
