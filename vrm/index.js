@@ -482,6 +482,78 @@ function shouldUseVoiceforgeForVrmSpeech() {
     return extension_settings?.tts?.enabled === true;
 }
 
+function initializeVrmCollapsibleSections() {
+    const defaultExpandedSections = new Set(['global_settings', 'model_mapping', 'model_settings']);
+
+    $('#vrm_settings h4').each(function () {
+        const title = String($(this).text() || '').trim();
+        if (!title) {
+            return;
+        }
+
+        const header = $(this).parent();
+        if (header.hasClass('vrm-section-header')) {
+            return;
+        }
+
+        const sectionId = title.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'section';
+        const contentId = `vrm_section_content_${sectionId}`;
+        const contentItems = [];
+        let next = header.next();
+
+        while (next.length && next.find('h4').length === 0) {
+            contentItems.push(next[0]);
+            next = next.next();
+        }
+
+        if (!contentItems.length) {
+            return;
+        }
+
+        header
+            .addClass('vrm-section-header')
+            .attr({
+                role: 'button',
+                tabindex: '0',
+                'aria-controls': contentId,
+            });
+        $(this).replaceWith(`<span>${title}</span><i class="fa-solid fa-chevron-down vrm-section-toggle-icon"></i>`);
+
+        const content = $('<div></div>')
+            .addClass('vrm-section-content')
+            .attr('id', contentId)
+            .append(contentItems);
+        header.after(content);
+
+        const storageKey = `vrm.section.${sectionId}.expanded`;
+        const storedState = localStorage.getItem(storageKey);
+        const isExpanded = storedState === null ? defaultExpandedSections.has(sectionId) : storedState === 'true';
+        content.toggle(isExpanded);
+        header.attr('aria-expanded', String(isExpanded));
+        header.find('.vrm-section-toggle-icon')
+            .toggleClass('fa-chevron-up', isExpanded)
+            .toggleClass('fa-chevron-down', !isExpanded);
+
+        const toggleSection = () => {
+            const expanded = !content.is(':visible');
+            content.slideToggle(160);
+            header.attr('aria-expanded', String(expanded));
+            header.find('.vrm-section-toggle-icon')
+                .toggleClass('fa-chevron-up', expanded)
+                .toggleClass('fa-chevron-down', !expanded);
+            localStorage.setItem(storageKey, String(expanded));
+        };
+
+        header.on('click.vrmSectionToggle', toggleSection);
+        header.on('keydown.vrmSectionToggle', (event) => {
+            if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                toggleSection();
+            }
+        });
+    });
+}
+
 //#############################//
 
 //#############################//
@@ -745,6 +817,7 @@ jQuery(async () => {
         bindTopbarDrawerClickHandler();
     }
 
+    initializeVrmCollapsibleSections();
     loadSettings();
 
 

@@ -627,6 +627,7 @@ const cursorRaycaster = new THREE.Raycaster();
 const cursorNdc = new THREE.Vector2();
 const cursorTargetPos = new THREE.Vector3();
 const expressionBlendJobs = {};
+const idleFrameJobs = {};
 const socialLookState = {};
 const cursorBodyFollowState = {};
 const ambientPresenceState = {};
@@ -635,6 +636,54 @@ const selfContactState = {};
 const recentExpressionDispatch = new Map(); // key: character|chat_id -> signature
 
 const IDENTITY_QUATERNION = new THREE.Quaternion();
+const VRM_MAX_PIXEL_RATIO = 1.35;
+const VRM_ACTIVE_FRAME_INTERVAL_MS = 1000 / 60;
+const VRM_DEFAULT_FRAME_INTERVAL_MS = 1000 / 30;
+const VRM_IDLE_FRAME_INTERVAL_MS = 1000 / 20;
+const VRM_HELPER_SYNC_INTERVAL_MS = 1000 / 15;
+const VRM_PHONE_SYNC_INTERVAL_MS = 1000 / 30;
+let lastVrmFrameAt = 0;
+
+function setIdleFrameJob(character, jobKey, update) {
+  if (!character || !jobKey || typeof update !== 'function') return;
+  if (!idleFrameJobs[character]) {
+    idleFrameJobs[character] = new Map();
+  }
+  idleFrameJobs[character].set(jobKey, update);
+}
+
+function clearIdleFrameJob(character, jobKey) {
+  if (!idleFrameJobs[character]) return;
+  idleFrameJobs[character].delete(jobKey);
+  if (idleFrameJobs[character].size === 0) {
+    delete idleFrameJobs[character];
+  }
+}
+
+function clearIdleFrameJobs(character) {
+  if (character) {
+    delete idleFrameJobs[character];
+    return;
+  }
+  for (const key of Object.keys(idleFrameJobs)) {
+    delete idleFrameJobs[key];
+  }
+}
+
+function updateIdleFrameJobs(character, nowMs, deltaTime) {
+  const jobs = idleFrameJobs[character];
+  if (!jobs || jobs.size === 0) return;
+
+  for (const [jobKey, update] of [...jobs.entries()]) {
+    const keepRunning = update(nowMs, deltaTime) !== false;
+    if (!keepRunning) {
+      jobs.delete(jobKey);
+    }
+  }
+  if (jobs.size === 0) {
+    delete idleFrameJobs[character];
+  }
+}
 
 function suspendNaturalIdle(character, minDelayMs = 3000) {
   const now = Date.now();
@@ -1145,11 +1194,12 @@ function applyIdleExpression(vrm, character, expressionName, intensity = 0.7, du
     const startTime = Date.now();
     const rampDuration = duration * 0.3;
     const holdDuration = duration * 0.4;
+    const jobKey = `idleExpression:${finalExpression}`;
 
-    function updateExpression() {
-        if (!current_avatars[character]) return;
+    setIdleFrameJob(character, jobKey, (nowMs) => {
+        if (!current_avatars[character]) return false;
 
-        const elapsed = Date.now() - startTime;
+        const elapsed = nowMs - startTime;
 
         if (elapsed >= duration) {
             // Explicitly reset expression to 0 for blink-type expressions
@@ -1162,7 +1212,7 @@ function applyIdleExpression(vrm, character, expressionName, intensity = 0.7, du
                 current_avatars[character].winking = false;
                 current_avatars[character].customWinking = false;
             }
-            return;
+            return false;
         }
 
         let amplitude = 0;
@@ -1175,10 +1225,8 @@ function applyIdleExpression(vrm, character, expressionName, intensity = 0.7, du
         }
 
         setExpressionValueWithWinkSupport(vrm.expressionManager, finalExpression, finalIntensity * amplitude);
-        requestAnimationFrame(updateExpression);
-    }
-
-    updateExpression();
+        return true;
+    });
 }
 
 // Helper to apply custom blend shape groups during idle animations
@@ -1195,11 +1243,12 @@ function applyCustomBlendShapeGroupIdle(vrm, character, expressionName, blendMap
     const rampDuration = duration * 0.3;
     const holdDuration = duration * 0.4;
     const blendShapes = blendMapping.blendShapes || {};
+    const jobKey = `idleBlendShape:${expressionName}`;
 
-    function updateBlendShapes() {
-        if (!current_avatars[character]) return;
+    setIdleFrameJob(character, jobKey, (nowMs) => {
+        if (!current_avatars[character]) return false;
 
-        const elapsed = Date.now() - startTime;
+        const elapsed = nowMs - startTime;
 
         if (elapsed >= duration) {
             // Explicitly reset all blend shapes to 0
@@ -1214,7 +1263,7 @@ function applyCustomBlendShapeGroupIdle(vrm, character, expressionName, blendMap
                 current_avatars[character].winking = false;
                 current_avatars[character].customWinking = false;
             }
-            return;
+            return false;
         }
 
         let amplitude = 0;
@@ -1231,10 +1280,8 @@ function applyCustomBlendShapeGroupIdle(vrm, character, expressionName, blendMap
             setExpressionValueWithWinkSupport(vrm.expressionManager, blendShapeName, adjustedIntensity);
         }
 
-        requestAnimationFrame(updateBlendShapes);
-    }
-
-    updateBlendShapes();
+        return true;
+    });
 }
 
 // Helper to apply subtle model Y rotation during idle movements
@@ -1256,29 +1303,29 @@ function applyModelRotation(vrm, character, modelId, targetYaw, duration = 7000)
     const rampDuration = duration * 0.3;
     const holdDuration = duration * 0.4;
     const totalDuration = duration;
+    const jobKey = 'modelRotation';
     
-    function updateRotation() {
-        if (current_avatars[character]?.["id"] !== modelId) return;
-        if (modelRotationJobs[character] !== jobId) return;
+    setIdleFrameJob(character, jobKey, (nowMs) => {
+        if (current_avatars[character]?.["id"] !== modelId) return false;
+        if (modelRotationJobs[character] !== jobId) return false;
 
         if (cursorTrackingEnabled && extension_settings.vrm.follow_cursor) {
             if (modelRotationJobs[character] === jobId) {
                 delete modelRotationJobs[character];
             }
-            return;
+            return false;
         }
         
-        const elapsed = Date.now() - startTime;
+        const elapsed = nowMs - startTime;
         
         if (elapsed >= totalDuration) {
             // Return to base
             objectContainer.rotation.y += (startYaw - objectContainer.rotation.y) * 0.03;
-            if (Math.abs(objectContainer.rotation.y - startYaw) > 0.001) {
-                requestAnimationFrame(updateRotation);
-            } else if (modelRotationJobs[character] === jobId) {
+            if (Math.abs(objectContainer.rotation.y - startYaw) <= 0.001 && modelRotationJobs[character] === jobId) {
                 delete modelRotationJobs[character];
+                return false;
             }
-            return;
+            return true;
         }
         
         let amplitude = 0;
@@ -1292,11 +1339,9 @@ function applyModelRotation(vrm, character, modelId, targetYaw, duration = 7000)
         
         const currentTarget = startYaw + (targetYaw * amplitude);
         objectContainer.rotation.y += (currentTarget - objectContainer.rotation.y) * 0.04;
-        
-        requestAnimationFrame(updateRotation);
-    }
-    
-    updateRotation();
+
+        return true;
+    });
 }
 
 // Helper to get available blend shape names from VRM model
@@ -1529,66 +1574,65 @@ const NATURAL_MOVEMENTS = {
         { x: 0.02, y: -0.06, duration: 3000 }
       ];
 
-            let currentStep = 0;
             const head = vrm.humanoid?.getNormalizedBoneNode("head");
             if (!head) return;
             const baseEuler = new THREE.Euler().setFromQuaternion(head.quaternion.clone());
+            const baseQuat = new THREE.Quaternion().setFromEuler(baseEuler);
+            const jobKey = 'naturalLookAround';
+            const state = {
+                phase: 'step',
+                stepIndex: 0,
+                startAt: Date.now(),
+                waitUntil: 0,
+                startQuat: head.quaternion.clone(),
+                targetQuat: null,
+                returnQuat: null,
+            };
 
-            function doStep() {
-                if (currentStep >= directions.length ||
-                    current_avatars[character]?.vrm !== vrm ||
-                    current_avatars[character]?.["id"] !== modelId) {
-                    return;
-                }
-
-                const step = directions[currentStep];
-                const startTime = Date.now();
-                const startQuat = head.quaternion.clone();
-                const targetEuler = new THREE.Euler(
+            const setStepTarget = () => {
+                const step = directions[state.stepIndex];
+                state.phase = 'step';
+                state.startAt = Date.now();
+                state.startQuat = head.quaternion.clone();
+                state.targetQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
                     baseEuler.x + step.x,
                     baseEuler.y + step.y,
                     baseEuler.z
-                );
-                const targetQuat = new THREE.Quaternion().setFromEuler(targetEuler);
+                ));
+            };
+            setStepTarget();
 
-                function animateStep() {
-                    if (current_avatars[character]?.vrm !== vrm) return;
-                    const elapsed = Date.now() - startTime;
-                    const progress = Math.min(elapsed / step.duration, 1);
-                    const eased = easeInOutCubic(progress);
+            setIdleFrameJob(character, jobKey, (nowMs) => {
+                if (current_avatars[character]?.vrm !== vrm || current_avatars[character]?.["id"] !== modelId) return false;
 
-                    head.quaternion.slerpQuaternions(startQuat, targetQuat, eased);
-
-                    if (progress < 1) {
-                        requestAnimationFrame(animateStep);
-                    } else {
-                        currentStep++;
-                        if (currentStep < directions.length) {
-                            setTimeout(doStep, 1200);
-                        } else {
-                            const returnStart = Date.now();
-                            const returnDuration = 2500;
-                            const holdQuat = head.quaternion.clone();
-                            const baseQuat = new THREE.Quaternion().setFromEuler(baseEuler);
-
-                            function returnToBase() {
-                                const returnElapsed = Date.now() - returnStart;
-                                const returnProgress = Math.min(returnElapsed / returnDuration, 1);
-                                head.quaternion.slerpQuaternions(holdQuat, baseQuat, easeInOutCubic(returnProgress));
-
-                                if (returnProgress < 1) {
-                                    requestAnimationFrame(returnToBase);
-                                }
-                            }
-                            returnToBase();
-                        }
-                    }
+                if (state.phase === 'wait') {
+                    if (nowMs < state.waitUntil) return true;
+                    setStepTarget();
                 }
 
-                animateStep();
-            }
+                if (state.phase === 'return') {
+                    const progress = Math.min((nowMs - state.startAt) / 2500, 1);
+                    head.quaternion.slerpQuaternions(state.returnQuat, baseQuat, easeInOutCubic(progress));
+                    return progress < 1;
+                }
 
-            doStep();
+                const step = directions[state.stepIndex];
+                const progress = Math.min((nowMs - state.startAt) / step.duration, 1);
+                head.quaternion.slerpQuaternions(state.startQuat, state.targetQuat, easeInOutCubic(progress));
+                if (progress < 1) return true;
+
+                state.stepIndex++;
+                if (state.stepIndex < directions.length) {
+                    state.phase = 'wait';
+                    state.waitUntil = nowMs + 1200;
+                    return true;
+                }
+
+                state.phase = 'return';
+                state.startAt = nowMs;
+                state.returnQuat = head.quaternion.clone();
+                return true;
+            });
         }
     },
     shoulderShrug: {
@@ -1611,29 +1655,18 @@ const NATURAL_MOVEMENTS = {
             const holdDuration = 4000;
             const totalDuration = rampDuration * 2 + holdDuration;
 
-            function animateShrug() {
-                if (current_avatars[character]?.vrm !== vrm ||
-                    current_avatars[character]?.["id"] !== modelId) {
-                    return;
-                }
+            setIdleFrameJob(character, 'naturalShoulderShrug', (nowMs) => {
+                if (current_avatars[character]?.vrm !== vrm || current_avatars[character]?.["id"] !== modelId) return false;
 
-                const elapsed = Date.now() - startTime;
+                const elapsed = nowMs - startTime;
 
                 if (elapsed >= totalDuration) {
-                    if (leftShoulder && baseLeft) {
-                        leftShoulder.quaternion.slerp(baseLeft, 0.03);
-                    }
-                    if (rightShoulder && baseRight && bothShoulders) {
-                        rightShoulder.quaternion.slerp(baseRight, 0.03);
-                    }
+                    if (leftShoulder && baseLeft) leftShoulder.quaternion.slerp(baseLeft, 0.03);
+                    if (rightShoulder && baseRight && bothShoulders) rightShoulder.quaternion.slerp(baseRight, 0.03);
 
                     const stillMoving = (leftShoulder && baseLeft && leftShoulder.quaternion.angleTo(baseLeft) > 0.001) ||
-                                       (rightShoulder && baseRight && bothShoulders && rightShoulder.quaternion.angleTo(baseRight) > 0.001);
-
-                    if (stillMoving) {
-                        requestAnimationFrame(animateShrug);
-                    }
-                    return;
+                        (rightShoulder && baseRight && bothShoulders && rightShoulder.quaternion.angleTo(baseRight) > 0.001);
+                    return !!stillMoving;
                 }
 
                 let amplitude = 0;
@@ -1645,22 +1678,11 @@ const NATURAL_MOVEMENTS = {
                     amplitude = 1 - easeInOutCubic((elapsed - rampDuration - holdDuration) / rampDuration);
                 }
 
-                const shrugEuler = new THREE.Euler(-shrugAmount * amplitude, 0, 0);
-                const shrugQuat = new THREE.Quaternion().setFromEuler(shrugEuler);
-
-                if (leftShoulder && baseLeft) {
-                    const targetQuat = baseLeft.clone().multiply(shrugQuat);
-                    leftShoulder.quaternion.slerp(targetQuat, 0.04);
-                }
-                if (rightShoulder && baseRight && bothShoulders) {
-                    const targetQuat = baseRight.clone().multiply(shrugQuat);
-                    rightShoulder.quaternion.slerp(targetQuat, 0.04);
-                }
-
-                requestAnimationFrame(animateShrug);
-            }
-
-            animateShrug();
+                const shrugQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(-shrugAmount * amplitude, 0, 0));
+                if (leftShoulder && baseLeft) leftShoulder.quaternion.slerp(baseLeft.clone().multiply(shrugQuat), 0.04);
+                if (rightShoulder && baseRight && bothShoulders) rightShoulder.quaternion.slerp(baseRight.clone().multiply(shrugQuat), 0.04);
+                return true;
+            });
         }
     },
     armStretch: {
@@ -1682,27 +1704,17 @@ const NATURAL_MOVEMENTS = {
             const holdDuration = 5000;
             const totalDuration = rampDuration * 2 + holdDuration;
 
-            function animateStretch() {
-                if (current_avatars[character]?.vrm !== vrm ||
-                    current_avatars[character]?.["id"] !== modelId) {
-                    return;
-                }
+            setIdleFrameJob(character, 'naturalArmStretch', (nowMs) => {
+                if (current_avatars[character]?.vrm !== vrm || current_avatars[character]?.["id"] !== modelId) return false;
 
-                const elapsed = Date.now() - startTime;
+                const elapsed = nowMs - startTime;
 
                 if (elapsed >= totalDuration) {
                     upperArm.quaternion.slerp(baseUpper, 0.03);
-                    if (lowerArm && baseLower) {
-                        lowerArm.quaternion.slerp(baseLower, 0.03);
-                    }
+                    if (lowerArm && baseLower) lowerArm.quaternion.slerp(baseLower, 0.03);
 
-                    const stillMoving = upperArm.quaternion.angleTo(baseUpper) > 0.001 ||
-                                       (lowerArm && baseLower && lowerArm.quaternion.angleTo(baseLower) > 0.001);
-
-                    if (stillMoving) {
-                        requestAnimationFrame(animateStretch);
-                    }
-                    return;
+                    return upperArm.quaternion.angleTo(baseUpper) > 0.001 ||
+                        (lowerArm && baseLower && lowerArm.quaternion.angleTo(baseLower) > 0.001);
                 }
 
                 let amplitude = 0;
@@ -1714,28 +1726,20 @@ const NATURAL_MOVEMENTS = {
                     amplitude = 1 - easeInOutCubic((elapsed - rampDuration - holdDuration) / rampDuration);
                 }
 
-                const stretchEuler = new THREE.Euler(
+                const stretchQuat = new THREE.Quaternion().setFromEuler(new THREE.Euler(
                     -0.2 * amplitude,
                     0,
                     (side === "left" ? 0.25 : -0.25) * amplitude
-                );
-                const stretchQuat = new THREE.Quaternion().setFromEuler(stretchEuler);
-                const targetUpper = baseUpper.clone().multiply(stretchQuat);
-
-                upperArm.quaternion.slerp(targetUpper, 0.04);
+                ));
+                upperArm.quaternion.slerp(baseUpper.clone().multiply(stretchQuat), 0.04);
 
                 if (lowerArm && baseLower) {
-                    const elbowBend = new THREE.Quaternion().setFromEuler(
-                        new THREE.Euler(-0.12 * amplitude, 0, 0)
-                    );
-                    const targetLower = baseLower.clone().multiply(elbowBend);
-                    lowerArm.quaternion.slerp(targetLower, 0.04);
+                    const elbowBend = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.12 * amplitude, 0, 0));
+                    lowerArm.quaternion.slerp(baseLower.clone().multiply(elbowBend), 0.04);
                 }
 
-                requestAnimationFrame(animateStretch);
-            }
-
-            animateStretch();
+                return true;
+            });
         }
     },
   weightShift: {
@@ -3053,11 +3057,61 @@ function syncCharacterCollisionProxies(character, includeHitboxes = false) {
     }
 }
 
+function hasRunningIdleFrameJobs() {
+    return Object.values(idleFrameJobs).some((jobs) => jobs?.size > 0);
+}
+
+function hasVisiblePhoneProp() {
+    return Object.values(current_avatars).some((avatar) => avatar?.phoneProp?.visible);
+}
+
+function hasRunningMixerAction(mixer) {
+    const actions = Array.isArray(mixer?._actions) ? mixer._actions : [];
+    return actions.some((action) => action?.enabled && (!action.isRunning || action.isRunning()));
+}
+
+function getVrmFrameInterval(nowMs) {
+    if (Object.keys(current_avatars).length === 0) {
+        return VRM_IDLE_FRAME_INTERVAL_MS;
+    }
+
+    if (isAnyCharacterSpeaking(nowMs) || realtimeLipSyncActive || hasRunningIdleFrameJobs()) {
+        return VRM_ACTIVE_FRAME_INTERVAL_MS;
+    }
+
+    if (
+        cursorTrackingEnabled ||
+        extension_settings.vrm.show_grid ||
+        hasVisiblePhoneProp() ||
+        Object.values(current_avatars).some((avatar) => hasRunningMixerAction(avatar?.animation_mixer))
+    ) {
+        return VRM_DEFAULT_FRAME_INTERVAL_MS;
+    }
+
+    return VRM_IDLE_FRAME_INTERVAL_MS;
+}
+
+function shouldRunThrottledUpdate(avatar, key, nowMs, intervalMs) {
+    const prop = `_last${key}At`;
+    const lastAt = Number(avatar?.[prop] || 0);
+    if ((nowMs - lastAt) < intervalMs) {
+        return false;
+    }
+    avatar[prop] = nowMs;
+    return true;
+}
+
 function animate() {
     requestAnimationFrame( animate );
     if (renderer !== undefined && scene !== undefined && camera !== undefined) {
-        const deltaTime = clock.getDelta();
         const nowMs = Date.now();
+        const frameInterval = getVrmFrameInterval(nowMs);
+        if (lastVrmFrameAt > 0 && (nowMs - lastVrmFrameAt) < frameInterval) {
+            return;
+        }
+        lastVrmFrameAt = nowMs;
+
+        const deltaTime = clock.getDelta();
 
         if (isAnyCharacterSpeaking(nowMs) && nowMs - lastSpeechActivityPingAt > 250) {
             markUserActivity("speech");
@@ -3070,8 +3124,9 @@ function animate() {
         }
 
         for(const character in current_avatars) {
-            const vrm = current_avatars[character]["vrm"];
-            const mixer = current_avatars[character]["animation_mixer"];
+            const avatar = current_avatars[character];
+            const vrm = avatar["vrm"];
+            const mixer = avatar["animation_mixer"];
             const lookAtState = getLookAtStateForCharacter(character);
             const proceduralControl = getProceduralControlProfile(character);
             
@@ -3092,17 +3147,17 @@ function animate() {
             applyAmbientPresence(vrm, character, deltaTime, inactivityIntensity, proceduralControl);
             applyAmbientExpressionDynamics(character, deltaTime, inactivityIntensity);
             applySelfContactGuard(vrm, character, deltaTime, proceduralControl);
+            updateIdleFrameJobs(character, nowMs, deltaTime);
             updateTextTalkMouth(character, vrm, nowMs);
             if (realtimeLipSyncActive && realtimeLipSyncCharacter === character) {
                 updateRealtimeLipSync(nowMs);
             }
 
             const shouldSyncCollisionProxies = extension_settings.vrm.show_grid;
-            if (shouldSyncCollisionProxies) {
+            if (shouldSyncCollisionProxies && shouldRunThrottledUpdate(avatar, 'HelperSync', nowMs, VRM_HELPER_SYNC_INTERVAL_MS)) {
                 syncCharacterCollisionProxies(character, extension_settings.vrm.hitboxes);
             }
 
-            const avatar = current_avatars[character];
             if (avatar._gridVisible !== shouldSyncCollisionProxies) {
                 avatar["collider"].visible = shouldSyncCollisionProxies;
                 for (const body_part in avatar["hitboxes"]) {
@@ -3111,7 +3166,7 @@ function animate() {
                 avatar._gridVisible = shouldSyncCollisionProxies;
             }
 
-            if (avatar.phoneProp?.visible) {
+            if (avatar.phoneProp?.visible && shouldRunThrottledUpdate(avatar, 'PhoneSync', nowMs, VRM_PHONE_SYNC_INTERVAL_MS)) {
                 updatePhonePropTransform(character);
             }
         }
@@ -3178,11 +3233,12 @@ async function loadScene() {
     }
 
     clock.start();
+    lastVrmFrameAt = 0;
 
     // renderer
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias : true });
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'default' });
     renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setPixelRatio( Math.min(window.devicePixelRatio || 1, 1.5) );
+    renderer.setPixelRatio( Math.min(window.devicePixelRatio || 1, VRM_MAX_PIXEL_RATIO) );
     renderer.domElement.id = VRM_CANVAS_ID;
     document.body.appendChild( renderer.domElement );
 
@@ -3413,6 +3469,8 @@ async function unloadModel(character) {
   if (modelRotationJobs[character]) {
     delete modelRotationJobs[character];
   }
+
+  clearIdleFrameJobs(character);
 
   if (cursorTiltState[character]) {
     resetCursorTilt(current_avatars[character]["vrm"], character);
@@ -5465,6 +5523,7 @@ function onWindowResize(){
         camera.updateProjectionMatrix();
 
         renderer.setSize( window.innerWidth, window.innerHeight );
+        renderer.setPixelRatio( Math.min(window.devicePixelRatio || 1, VRM_MAX_PIXEL_RATIO) );
     }
 }
 

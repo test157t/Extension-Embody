@@ -84,6 +84,33 @@ const TARGET_SENTINEL_CHANNEL_B = -102
 const TARGET_SENTINEL_CHANNEL_C = -103
 const TARGET_SENTINEL_CHANNEL_D = -104
 
+function initializeIntifaceEmbodyTheme() {
+  const sectionPairs = [
+    ['#intiface-playmode-menu-toggle', '#intiface-playmode-menu-content'],
+    ['#intiface-ai-modes-toggle', '#intiface-ai-modes-content'],
+    ['#intiface-mode-builder-toggle', '#intiface-mode-builder-content'],
+    ['#intiface-intensity-toggle', '#intiface-intensity-content'],
+    ['#intiface-media-menu-toggle', '#intiface-media-menu-content'],
+    ['#intiface-funscript-editor-toggle', '#intiface-funscript-editor-content'],
+    ['#intiface-funscript-menu-toggle', '#intiface-funscript-menu-content'],
+    ['#intiface-advanced-toggle', '#intiface-advanced-content'],
+  ]
+
+  sectionPairs.forEach(([headerSelector, contentSelector]) => {
+    const header = $(headerSelector)
+    const content = $(contentSelector)
+    if (header.length) {
+      header.addClass('embody-intiface-section-header')
+    }
+    if (content.length) {
+      content.addClass('embody-intiface-section-content embody-intiface-card')
+    }
+  })
+
+  $('#intiface-ai-status, #intiface-devices').addClass('embody-intiface-card')
+  $('#intiface-ip-input').closest('.flex-container').addClass('embody-intiface-connect-row')
+}
+
 // Settings
 let globalIntensityScale = 100
 let globalInvert = false
@@ -3118,6 +3145,7 @@ if (embodyPanel.length) {
 } else {
   $("#extensions-settings-button").after(template)
 }
+initializeIntifaceEmbodyTheme()
 
 // Initialize connected devices module (requires template in DOM)
 await initConnectedDevices(client, buttplug)
