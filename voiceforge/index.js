@@ -436,7 +436,7 @@ function getEstimatedAudioOutputLatencyMs(audioContext = null) {
 }
 
 function shouldUseWebAudioStreaming() {
-    return !!(window.AudioContext || window.webkitAudioContext);
+    return !!window.AudioContext;
 }
 
 /**
@@ -474,12 +474,6 @@ function cleanupWebAudioContext() {
 // Expose analyser globally for VRM lip sync
 window.getVoiceForgeAnalyser = () => webAudioAnalyser; // Track sources for cleanup
 
-// Secondary audio element for preloading next chunk
-let preloadAudioElement = new Audio();
-preloadAudioElement.id = 'tts_audio_preload';
-preloadAudioElement.preload = 'auto';
-let preloadedBlobUrl = null;
-
 function getPersistedTtsVolumePercent() {
     const volumeFromTts = Number(extension_settings.tts?.tts_volume);
     if (Number.isFinite(volumeFromTts)) {
@@ -506,11 +500,6 @@ let currentAudioJob;
 let audioPaused = false;
 let audioQueueProcessorReady = true;
 
-// Cached event handler references for proper cleanup
-let currentEndedHandler = null;
-let currentCanplayHandler = null;
-let currentPlayingHandler = null;
-let currentBlobUrl = null;
 let lastSpokenSegmentId = null;
 
 const TTS_MODE_STANDARD = 'standard';
@@ -830,13 +819,19 @@ async function playAudioData(audioJob) {
         return;
     }
     
-    // For streaming TTS, use Web Audio API for gapless playback
-    // This matches VoiceForge core's approach
-    if (audioBlob instanceof Blob && (streamingTtsActive || webAudioIsPlaying) && shouldUseWebAudioStreaming()) {
+    if (!(audioBlob instanceof Blob)) {
+        throw new Error(`TTS received invalid audio data type ${typeof audioBlob}`);
+    }
+    if (!shouldUseWebAudioStreaming()) {
+        throw new Error('VoiceForge requires Web Audio API playback');
+    }
+
+    // Play every VoiceForge chunk through Web Audio so VRM lip sync reads the same audible stream.
+    {
         try {
             // Initialize Web Audio context if needed
             if (!webAudioContext || webAudioContext.state === 'closed') {
-                webAudioContext = new (window.AudioContext || window.webkitAudioContext)();
+                webAudioContext = new window.AudioContext();
                 
                 // Create GainNode for volume control
                 webAudioGainNode = webAudioContext.createGain();
@@ -844,8 +839,8 @@ async function playAudioData(audioJob) {
                 
                 // Create AnalyserNode for real-time lip sync (VRM can tap into this)
                 webAudioAnalyser = webAudioContext.createAnalyser();
-                webAudioAnalyser.fftSize = 1024;
-                webAudioAnalyser.smoothingTimeConstant = 0.2;  // Lower = more responsive lip sync
+                webAudioAnalyser.fftSize = 512;
+                webAudioAnalyser.smoothingTimeConstant = 0.05;  // Keep lip sync close to the audible stream
                 
                 // Audio chain: sources -> analyser -> gainNode -> destination
                 // Keep analyser pre-volume so lip sync remains expressive at low output volume.
@@ -936,8 +931,6 @@ async function playAudioData(audioJob) {
             // In streaming mode VRM reads this shared analyser directly; avoid per-chunk blob analysis.
             if (typeof window.vrmStartLipSync === 'function') {
                 window.vrmStartLipSync(char);
-            } else if (typeof window['vrmLipSync'] === 'function') {
-                window['vrmLipSync'](audioBlob, char, { webAudio: true }).catch(() => {});
             }
             
             // Mark ready for next chunk immediately (gapless scheduling)
@@ -946,87 +939,9 @@ async function playAudioData(audioJob) {
             return;
             
         } catch (e) {
-            console.warn('[Audio] Web Audio API failed, falling back to audio element:', e);
-            // Fall through to audio element playback
+            throw new Error(`VoiceForge Web Audio playback failed: ${e?.message || e}`);
         }
     }
-    
-    // Fallback: Use audio element for non-streaming or if Web Audio fails
-    // Clean up previous event listeners to prevent stacking
-    if (currentEndedHandler) {
-        audioElement.removeEventListener('ended', currentEndedHandler);
-    }
-    if (currentCanplayHandler) {
-        audioElement.removeEventListener('canplay', currentCanplayHandler);
-    }
-    if (currentPlayingHandler) {
-        audioElement.removeEventListener('playing', currentPlayingHandler);
-    }
-    
-    // Revoke previous blob URL to prevent memory leaks
-    if (currentBlobUrl) {
-        URL.revokeObjectURL(currentBlobUrl);
-        currentBlobUrl = null;
-    }
-    
-    if (audioBlob instanceof Blob) {
-        currentBlobUrl = URL.createObjectURL(audioBlob);
-
-        // Trigger VRM lip sync if available (VRM handles async setup internally, no need to await)
-        if (typeof window['vrmLipSync'] === 'function') {
-            window['vrmLipSync'](audioBlob, char).catch(() => {});
-        }
-
-        audioElement.src = currentBlobUrl;
-    } else if (typeof audioBlob === 'string') {
-        audioElement.src = audioBlob;
-    } else {
-        throw `TTS received invalid audio data type ${typeof audioBlob}`;
-    }
-    
-    // Create new handlers and store references for cleanup
-    currentEndedHandler = () => {
-        completeCurrentAudioJob();
-    };
-    
-    audioElement.addEventListener('ended', currentEndedHandler);
-    
-// For blob URLs, data is already in memory - play immediately!
-    // Don't wait for canplay event which adds unnecessary delay
-    audioElement.volume = getPersistedTtsVolumePercent() / 100;
-    audioElement.playbackRate = extension_settings.tts.playback_rate;
-
-    beginTtsPlaybackSession({ messageId, requestId, mode });
-
-    let playbackStartEmitted = false;
-    const emitPlaybackStartEvents = () => {
-        if (playbackStartEmitted) {
-            return;
-        }
-        playbackStartEmitted = true;
-        emitVoiceforgeTtsStartOnce();
-        emitVoiceforgeTtsChunkStart(audioJob);
-        emitVoiceforgeTtsSpokenTextOnce(audioJob);
-    };
-    currentPlayingHandler = () => {
-        emitPlaybackStartEvents();
-    };
-    audioElement.addEventListener('playing', currentPlayingHandler, { once: true });
-
-    const schedulePlaybackStartEvent = () => {
-        const outputDelay = Math.max(16, Math.round(getEstimatedAudioOutputLatencyMs() + 24));
-        setTimeout(() => {
-            if (!playbackStartEmitted && !audioElement.paused) {
-                emitPlaybackStartEvents();
-            }
-        }, outputDelay);
-    };
-
-    audioElement.play().then(() => {
-        schedulePlaybackStartEvent();
-    }).catch(e => {
-        throw new Error(`Audio playback failed: ${e?.message || e}`);
-    });
 }
 
 function updateUiAudioPlayState() {
@@ -1110,17 +1025,6 @@ function bindTopbarDrawerClickHandler() {
 function completeCurrentAudioJob() {
     audioQueueProcessorReady = true;
     currentAudioJob = null;
-    
-    // Clean up the ended handler to prevent duplicate calls
-    if (currentEndedHandler) {
-        audioElement.removeEventListener('ended', currentEndedHandler);
-        currentEndedHandler = null;
-    }
-    if (currentPlayingHandler) {
-        audioElement.removeEventListener('playing', currentPlayingHandler);
-        currentPlayingHandler = null;
-    }
-    
     // If no more audio jobs pending
     if (audioJobQueue.length === 0 && ttsJobQueue.length === 0 && !ttsJobProcessing) {
         // Don't stop background if streaming TTS is still active (more sentences coming)
@@ -1236,7 +1140,6 @@ function parseMessageSegments(text) {
     return [];
 }
 
-// Legacy variable - kept for compatibility with reset functions but not used for blocking
 let ttsJobProcessing = false;
 
 function isTinyClauseChunk(text) {
@@ -4121,7 +4024,7 @@ function buildSettingsFromServerConfig(cfg, availableTracks = []) {
     // Build bg_tracks from config, matching to available tracks by filename
     // Config uses relative paths like "sounds/rain.mp3" 
     // Server returns absolute paths like "D:\...\sounds\rain.mp3"
-    const bgTracks = (cfg.bg_tracks || []).map(t => {
+    const bgTracks = (cfg.bg_tracks || []).flatMap(t => {
         const configPath = t.file || t.path || '';
         // Extract just the filename for matching
         const configFilename = configPath.split(/[/\\]/).pop();
@@ -4132,15 +4035,18 @@ function buildSettingsFromServerConfig(cfg, availableTracks = []) {
             const availFilename = availPath.split(/[/\\]/).pop();
             return availFilename === configFilename;
         });
+
+        if (!matchedTrack) {
+            return [];
+        }
         
-        return {
-            // Use the matched track's full path, or fall back to config path
-            path: matchedTrack?.path || configPath,
+        return [{
+            path: matchedTrack.path,
             volume: t.volume || 0.5,
             delay: t.delay || 0,
             fade_in: t.fade_in || 2,
             fade_out: t.fade_out || 2,
-        };
+        }];
     });
 
     // Build post-processing settings (updated to match VoiceForge UI)

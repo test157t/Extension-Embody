@@ -119,6 +119,9 @@ let overlayResizeFrameId = null;
 let overlayResizeSettleTimer = null;
 let overlayUiInteractionTimer = null;
 let overlayVisualRefreshFrameId = null;
+let overlayAnimationFrameId = null;
+let overlayCssMotionActive = false;
+let overlayCssMotionLastFrameAt = 0;
 let qrBarOriginalParent = null;
 let qrBarOriginalNextSibling = null;
 let qrBarMovedToSendArea = false;
@@ -152,6 +155,18 @@ const overlayCanvasParticles = {
     drawHeight: 0,
     lastTs: 0,
 };
+const overlaySpiralCanvas = {
+    canvas: null,
+    ctx: null,
+    active: false,
+    drawWidth: 0,
+    drawHeight: 0,
+    lastTs: 0,
+    spinCycleRings: [],
+    spinPulseRing: 0,
+    spinPulseFrame: 0,
+};
+const OVERLAY_CANVAS_FRAME_INTERVAL_MS = 1000 / 20;
 let waveformAnimationFrameId = null;
 let waveformLevelSmoothed = 0;
 let waveformBars = [];
@@ -490,7 +505,7 @@ function persistTtsVolume(volume) {
 }
 
 function getCallSfxContext() {
-    const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+    const AudioContextCtor = window.AudioContext;
     if (!AudioContextCtor) {
         return null;
     }
@@ -561,7 +576,7 @@ async function resolveIncomingCallAudioUrl() {
                 return url;
             }
         } catch (e) {
-            // Ignore and fall back to a silent incoming prompt.
+            throw e;
         }
         return null;
     })();
@@ -1295,6 +1310,37 @@ function ensureOverlayParticleCanvas() {
     return overlayCanvasParticles.canvas;
 }
 
+function ensureOverlaySpiralCanvas() {
+    const overlay = document.getElementById('voiceforge_call_overlay');
+    if (!overlay) {
+        return null;
+    }
+
+    if (!overlaySpiralCanvas.canvas || !overlay.contains(overlaySpiralCanvas.canvas)) {
+        let canvas = overlay.querySelector('.vf-call-spiral-canvas');
+        if (!canvas) {
+            const effectsLayer = overlay.querySelector('.vf-call-effects-layer');
+            if (effectsLayer) {
+                canvas = document.createElement('canvas');
+                canvas.className = 'vf-call-spiral-canvas';
+                effectsLayer.prepend(canvas);
+            }
+        }
+        if (!canvas) {
+            overlaySpiralCanvas.canvas = null;
+            overlaySpiralCanvas.ctx = null;
+            return null;
+        }
+
+        overlaySpiralCanvas.canvas = canvas;
+        overlaySpiralCanvas.ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
+        overlaySpiralCanvas.drawWidth = 0;
+        overlaySpiralCanvas.drawHeight = 0;
+    }
+
+    return overlaySpiralCanvas.canvas;
+}
+
 function resizeOverlayParticleCanvas(force = false) {
     const canvas = ensureOverlayParticleCanvas();
     const ctx = overlayCanvasParticles.ctx;
@@ -1305,7 +1351,7 @@ function resizeOverlayParticleCanvas(force = false) {
     const rect = canvas.getBoundingClientRect();
     const drawWidth = Math.max(1, Math.round(rect.width));
     const drawHeight = Math.max(1, Math.round(rect.height));
-    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const dpr = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1));
     const nextWidth = Math.max(1, Math.round(drawWidth * dpr));
     const nextHeight = Math.max(1, Math.round(drawHeight * dpr));
 
@@ -1320,11 +1366,294 @@ function resizeOverlayParticleCanvas(force = false) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
-function stopOverlayParticleCanvas(clearFrame = true) {
-    if (overlayCanvasParticles.rafId !== null) {
-        cancelAnimationFrame(overlayCanvasParticles.rafId);
-        overlayCanvasParticles.rafId = null;
+function resizeOverlaySpiralCanvas(force = false) {
+    const canvas = ensureOverlaySpiralCanvas();
+    const ctx = overlaySpiralCanvas.ctx;
+    if (!canvas || !ctx) {
+        return;
     }
+
+    const rect = canvas.getBoundingClientRect();
+    const drawWidth = Math.max(1, Math.round(rect.width));
+    const drawHeight = Math.max(1, Math.round(rect.height));
+    const dpr = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1));
+    const nextWidth = Math.max(1, Math.round(drawWidth * dpr));
+    const nextHeight = Math.max(1, Math.round(drawHeight * dpr));
+
+    if (!force && canvas.width === nextWidth && canvas.height === nextHeight && overlaySpiralCanvas.drawWidth === drawWidth && overlaySpiralCanvas.drawHeight === drawHeight) {
+        return;
+    }
+
+    canvas.width = nextWidth;
+    canvas.height = nextHeight;
+    overlaySpiralCanvas.drawWidth = drawWidth;
+    overlaySpiralCanvas.drawHeight = drawHeight;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+function hasActiveOverlayAnimationWork() {
+    return overlayCssMotionActive || overlaySpiralCanvas.active || overlayCanvasParticles.rafId !== null || waveformAnimationFrameId !== null;
+}
+
+function updateOverlayCssMotionFrame(ts) {
+    if (!overlayCssMotionActive || !callActive || isDocumentHidden() || !extension_settings[MODULE_NAME]?.overlayEnabled) {
+        overlayCssMotionActive = false;
+        return false;
+    }
+
+    const now = Number.isFinite(ts) ? ts : performance.now();
+    if (overlayCssMotionLastFrameAt !== 0 && (now - overlayCssMotionLastFrameAt) < WAVEFORM_FRAME_INTERVAL_MS) {
+        return true;
+    }
+    overlayCssMotionLastFrameAt = now;
+
+    const overlay = overlayDomCache.root?.[0] || document.getElementById('voiceforge_call_overlay');
+    if (!overlay) {
+        overlayCssMotionActive = false;
+        return false;
+    }
+
+    const t = now / 1000;
+    const breath = (Math.sin(t * 0.46) + 1) * 0.5;
+    const slow = (Math.sin(t * 0.073) + 1) * 0.5;
+    const drift = Math.sin(t * 0.19) * 0.62 + Math.sin(t * 0.047) * 0.32;
+    const lift = Math.cos(t * 0.16) * 0.48 + Math.sin(t * 0.061) * 0.22;
+    const depth = Math.max(0, Math.min(1, tranceDepth));
+
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-smoke-x', `${drift.toFixed(3)}%`);
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-smoke-y', `${lift.toFixed(3)}%`);
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-smoke-scale', (1.01 + breath * 0.01 + slow * 0.008).toFixed(4));
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-smoke-opacity', (0.24 + breath * 0.045 + depth * 0.035).toFixed(3));
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-vignette-opacity', (0.42 + depth * 0.16 + breath * 0.045).toFixed(3));
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-grid-y', `${((t * 0.62) % 72).toFixed(2)}px`);
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-aurora-rot', `${((t * -0.92) % 360).toFixed(2)}deg`);
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-aurora-opacity', (0.22 + slow * 0.08 + depth * 0.04).toFixed(3));
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-content-y', `${(Math.sin(t * 0.38) * 1.15).toFixed(2)}px`);
+    setCachedInlineStyle(overlay, 'vars', '--vf-overlay-screen-flash-opacity', '0');
+
+    const rings = overlay._vfCallRings || (overlay._vfCallRings = Array.from(overlay.querySelectorAll('.vf-ring')));
+    for (let i = 0; i < rings.length; i++) {
+        const phase = ((t * 0.11) + (i * 0.33)) % 1;
+        const scale = 0.94 + phase * 0.52;
+        const opacity = phase < 0.12
+            ? phase / 0.12 * 0.22
+            : Math.max(0, 0.22 * (1 - ((phase - 0.12) / 0.88)));
+        const ring = rings[i];
+        ring.style.transform = `translate(-50%, -50%) scale(${scale.toFixed(3)}) rotate(${(phase * 180).toFixed(2)}deg)`;
+        ring.style.opacity = opacity.toFixed(3);
+        ring.style.borderWidth = `${Math.max(0.5, 2 - phase * 1.5).toFixed(2)}px`;
+    }
+    return true;
+}
+
+function stopOverlayAnimationLoopIfIdle() {
+    if (hasActiveOverlayAnimationWork()) {
+        return;
+    }
+    if (overlayAnimationFrameId !== null) {
+        cancelAnimationFrame(overlayAnimationFrameId);
+        overlayAnimationFrameId = null;
+    }
+}
+
+function runOverlayAnimationFrame(ts) {
+    overlayAnimationFrameId = null;
+
+    const cssMotionActive = updateOverlayCssMotionFrame(ts);
+    const spiralActive = renderOverlaySpiralCanvas(ts);
+    const particlesActive = renderOverlayParticleCanvas(ts);
+    const waveformActive = updateCallWaveformFrame(ts);
+
+    if (cssMotionActive || spiralActive || particlesActive || waveformActive) {
+        overlayAnimationFrameId = requestAnimationFrame(runOverlayAnimationFrame);
+    }
+}
+
+function ensureOverlayAnimationLoop() {
+    if (overlayAnimationFrameId !== null || !hasActiveOverlayAnimationWork()) {
+        return;
+    }
+    overlayAnimationFrameId = requestAnimationFrame(runOverlayAnimationFrame);
+}
+
+function startOverlayCssMotion() {
+    if (isDocumentHidden()) {
+        return;
+    }
+    overlayCssMotionActive = true;
+    overlayCssMotionLastFrameAt = 0;
+    ensureOverlayAnimationLoop();
+}
+
+function stopOverlayCssMotion() {
+    overlayCssMotionActive = false;
+    overlayCssMotionLastFrameAt = 0;
+    stopOverlayAnimationLoopIfIdle();
+}
+
+function startOverlaySpiralCanvas() {
+    if (isDocumentHidden()) {
+        return;
+    }
+    overlaySpiralCanvas.active = true;
+    overlaySpiralCanvas.lastTs = 0;
+    ensureOverlaySpiralCanvas();
+    resizeOverlaySpiralCanvas(true);
+    ensureOverlayAnimationLoop();
+}
+
+function stopOverlaySpiralCanvas(clearFrame = true) {
+    overlaySpiralCanvas.active = false;
+    overlaySpiralCanvas.lastTs = 0;
+    overlaySpiralCanvas.spinCycleRings = [];
+    overlaySpiralCanvas.spinPulseRing = 0;
+    overlaySpiralCanvas.spinPulseFrame = 0;
+
+    if (clearFrame && overlaySpiralCanvas.ctx && overlaySpiralCanvas.drawWidth > 0 && overlaySpiralCanvas.drawHeight > 0) {
+        overlaySpiralCanvas.ctx.clearRect(0, 0, overlaySpiralCanvas.drawWidth, overlaySpiralCanvas.drawHeight);
+    }
+    stopOverlayAnimationLoopIfIdle();
+}
+
+function removeOverlaySpiralCanvas() {
+    stopOverlaySpiralCanvas(true);
+    overlaySpiralCanvas.canvas?.remove();
+    overlaySpiralCanvas.canvas = null;
+    overlaySpiralCanvas.ctx = null;
+}
+
+function drawOverlayVortexDots(ctx, width, height, now, reactiveLevel) {
+    const maxRadius = Math.sqrt(width * width + height * height) * 0.55;
+    const dotCount = Math.min(1000, Math.max(420, Math.floor(maxRadius * 1.25)));
+    const angleSpeed = now * 0.031;
+    const radiusStep = maxRadius / dotCount;
+    const centerX = width / 2;
+    const centerY = height / 2;
+    const dotSize = Math.max(2.0, Math.min(5.2, Math.min(width, height) / 180));
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < dotCount; i++) {
+        const radius = i * radiusStep;
+        if (radius < 18) continue;
+        const angle = i + angleSpeed;
+        const x = radius * Math.cos(angle);
+        const y = radius * Math.sin(angle);
+        const progress = i / dotCount;
+        const alpha = Math.max(0.014, Math.min(0.13, 0.02 + progress * 0.07 + reactiveLevel * 0.035));
+        const warm = Math.floor(168 + progress * 72);
+        const plum = Math.floor(96 + progress * 58);
+        ctx.fillStyle = i % 5 === 0
+            ? `rgba(${plum}, 74, 128, ${alpha.toFixed(3)})`
+            : `rgba(255, ${warm}, 104, ${alpha.toFixed(3)})`;
+        ctx.beginPath();
+        ctx.arc(x, y, dotSize * (0.62 + progress * 0.48), 0, Math.PI * 2);
+        ctx.fill();
+    }
+    ctx.restore();
+}
+
+function rebuildOverlaySpinCycleRings(width, height) {
+    const maxRadius = Math.sqrt(width * width + height * height) * 0.54;
+    const ballCount = 20;
+    const angleSlice = (Math.PI * 2) / ballCount;
+    const rings = [];
+    let radius = 4;
+    let ballSize = 2;
+    let offset = false;
+    while (radius < maxRadius) {
+        const angleMod = offset ? angleSlice * 0.5 : 0;
+        const speed = offset ? 0.02 : -0.02;
+        rings.push({ radius, angleMod, speed, baseAngle: 0 });
+        offset = !offset;
+        radius += ballSize;
+        ballSize *= 1.3;
+    }
+    overlaySpiralCanvas.spinCycleRings = rings;
+    overlaySpiralCanvas.spinPulseRing = rings.length + 2;
+    overlaySpiralCanvas.spinPulseFrame = 0;
+}
+
+function drawOverlaySpinCycle(ctx, width, height, frameScale, reactiveLevel) {
+    if (!overlaySpiralCanvas.spinCycleRings.length) {
+        rebuildOverlaySpinCycleRings(width, height);
+    }
+
+    const rings = overlaySpiralCanvas.spinCycleRings;
+    const ballCount = 20;
+    const angleSlice = (Math.PI * 2) / ballCount;
+    const centerX = width / 2;
+    const centerY = height / 2;
+
+    ctx.save();
+    ctx.translate(centerX, centerY);
+    ctx.globalCompositeOperation = 'lighter';
+    for (let r = 0; r < rings.length; r++) {
+        const ring = rings[r];
+        ring.baseAngle += ring.speed * frameScale;
+        const progress = rings.length > 1 ? r / (rings.length - 1) : 0;
+        const diameter = Math.max(2, 0.7 * ((Math.PI * 2 * ring.radius) / ballCount));
+        const pulseDistance = Math.abs(r - overlaySpiralCanvas.spinPulseRing);
+        const shadow = pulseDistance === 0 ? 0.42 : pulseDistance === 1 ? 0.52 : pulseDistance === 2 ? 0.63 : pulseDistance === 3 ? 0.75 : pulseDistance === 4 ? 0.86 : 1;
+        const alpha = Math.max(0.006, Math.min(0.065, (0.011 + progress * 0.032 + reactiveLevel * 0.014) * shadow));
+        for (let i = 0; i < ballCount; i++) {
+            const angle = (i * angleSlice) + ring.angleMod + ring.baseAngle;
+            const x = ring.radius * Math.cos(angle);
+            const y = ring.radius * Math.sin(angle);
+            ctx.fillStyle = i % 4 === 0
+                ? `rgba(142, 92, 146, ${alpha.toFixed(3)})`
+                : `rgba(255, 176, 104, ${alpha.toFixed(3)})`;
+            ctx.beginPath();
+            ctx.arc(x, y, diameter * 0.28, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    ctx.restore();
+
+    overlaySpiralCanvas.spinPulseFrame += frameScale;
+    if (overlaySpiralCanvas.spinPulseFrame >= 4) {
+        overlaySpiralCanvas.spinPulseRing = overlaySpiralCanvas.spinPulseRing > -2 ? overlaySpiralCanvas.spinPulseRing - 1 : rings.length + 2;
+        overlaySpiralCanvas.spinPulseFrame = 0;
+    }
+}
+
+function renderOverlaySpiralCanvas(ts) {
+    if (!overlaySpiralCanvas.active || !callActive || isDocumentHidden() || !extension_settings[MODULE_NAME]?.overlayEnabled || !isHypnoFeatureEnabled('hypnoSpiralEnabled')) {
+        stopOverlaySpiralCanvas(true);
+        return false;
+    }
+
+    const canvas = ensureOverlaySpiralCanvas();
+    const ctx = overlaySpiralCanvas.ctx;
+    if (!canvas || !ctx) {
+        return false;
+    }
+    resizeOverlaySpiralCanvas(false);
+
+    const width = overlaySpiralCanvas.drawWidth;
+    const height = overlaySpiralCanvas.drawHeight;
+    if (width <= 0 || height <= 0) {
+        return true;
+    }
+
+    const now = Number.isFinite(ts) ? ts : performance.now();
+    if (overlaySpiralCanvas.lastTs !== 0 && (now - overlaySpiralCanvas.lastTs) < OVERLAY_CANVAS_FRAME_INTERVAL_MS) {
+        return true;
+    }
+    const dt = Math.min(0.08, Math.max(0.008, ((now - (overlaySpiralCanvas.lastTs || now)) / 1000) || 0.033));
+    overlaySpiralCanvas.lastTs = now;
+    const frameScale = dt * 30;
+    const reactiveLevel = Math.max(0, Math.min(1, waveformLevelSmoothed || 0));
+
+    ctx.clearRect(0, 0, width, height);
+    drawOverlayVortexDots(ctx, width, height, now, reactiveLevel);
+    drawOverlaySpinCycle(ctx, width, height, frameScale, reactiveLevel);
+    return true;
+}
+
+function stopOverlayParticleCanvas(clearFrame = true) {
+    overlayCanvasParticles.rafId = null;
 
     overlayCanvasParticles.lastTs = 0;
     overlayCanvasParticles.particles = [];
@@ -1332,6 +1661,7 @@ function stopOverlayParticleCanvas(clearFrame = true) {
     if (clearFrame && overlayCanvasParticles.ctx && overlayCanvasParticles.drawWidth > 0 && overlayCanvasParticles.drawHeight > 0) {
         overlayCanvasParticles.ctx.clearRect(0, 0, overlayCanvasParticles.drawWidth, overlayCanvasParticles.drawHeight);
     }
+    stopOverlayAnimationLoopIfIdle();
 }
 
 function createCanvasParticle(style, zLayer, width, height, fallRate, fireflyGlow) {
@@ -1434,10 +1764,14 @@ function renderOverlayParticleCanvas(ts) {
 
     if (!ctx || width <= 0 || height <= 0 || !overlayCanvasParticles.particles.length || isDocumentHidden() || !callActive || !extension_settings[MODULE_NAME]?.overlayEnabled || !isHypnoFeatureEnabled('hypnoParticlesEnabled')) {
         overlayCanvasParticles.rafId = null;
-        return;
+        return false;
     }
 
-    const dt = Math.min(0.06, Math.max(0.008, ((ts - (overlayCanvasParticles.lastTs || ts)) / 1000) || 0.016));
+    if (overlayCanvasParticles.lastTs !== 0 && (ts - overlayCanvasParticles.lastTs) < OVERLAY_CANVAS_FRAME_INTERVAL_MS) {
+        return true;
+    }
+
+    const dt = Math.min(0.08, Math.max(0.008, ((ts - (overlayCanvasParticles.lastTs || ts)) / 1000) || 0.016));
     overlayCanvasParticles.lastTs = ts;
 
     ctx.clearRect(0, 0, width, height);
@@ -1489,7 +1823,7 @@ function renderOverlayParticleCanvas(ts) {
 
     ctx.globalAlpha = 1;
 
-    overlayCanvasParticles.rafId = requestAnimationFrame(renderOverlayParticleCanvas);
+    return true;
 }
 
 function startOverlayParticleCanvas(style, count, fallRate, fireflyGlow) {
@@ -1517,10 +1851,8 @@ function startOverlayParticleCanvas(style, count, fallRate, fireflyGlow) {
     }
 
     overlayCanvasParticles.lastTs = 0;
-    if (overlayCanvasParticles.rafId !== null) {
-        cancelAnimationFrame(overlayCanvasParticles.rafId);
-    }
-    overlayCanvasParticles.rafId = requestAnimationFrame(renderOverlayParticleCanvas);
+    overlayCanvasParticles.rafId = 1;
+    ensureOverlayAnimationLoop();
 }
 
 function scheduleParticleImpacts(style = 'snow') {
@@ -1588,9 +1920,7 @@ function startHypnoParticles() {
     const particleStyle = getHypnoParticleStyle();
     const fireflyGlow = getHypnoFireflyGlow();
 
-    const domNearRatio = particleStyle === 'firefly' ? 0.34 : 0.26;
-    const nearDomCount = Math.max(0, Math.round(particleCount * domNearRatio));
-    const canvasCount = Math.max(0, particleCount - nearDomCount);
+    const canvasCount = particleCount;
 
     while (activeOverlayElements.particles.length) {
         releaseOverlayElement('particles', activeOverlayElements.particles[activeOverlayElements.particles.length - 1]);
@@ -1602,78 +1932,6 @@ function startHypnoParticles() {
     scheduleParticleImpacts(particleStyle);
     startOverlayParticleCanvas(particleStyle, canvasCount, fallRate, fireflyGlow);
 
-    for (let i = 0; i < nearDomCount; i++) {
-        const particle = acquireOverlayElement('particles', 'vf-call-particle');
-        
-        const startX = particleStyle === 'firefly'
-            ? (6 + Math.random() * 88)
-            : (Math.random() * 100);
-        const startY = particleStyle === 'firefly'
-            ? (10 + Math.random() * 78)
-            : (-5 + Math.random() * 10);
-        const delay = -Math.random() * 8;
-        
-        const speed = 2 + Math.random() * 1.5;
-        const size = (2 + Math.random() * 3) + 'px';
-        const opacity = 0.5 + Math.random() * 0.4;
-        const blur = '0.5px';
-        
-        const driftX = particleStyle === 'rain'
-            ? (Math.random() - 0.5) * 16
-            : particleStyle === 'firefly'
-                ? (Math.random() - 0.5) * 120
-                : (Math.random() - 0.5) * 78;
-        const effectiveSpeed = Math.max(0.2, speed / Math.max(0.25, fallRate));
-        const rainHeight = (8 + Math.random() * 16) + 'px';
-        const rainWidth = (0.7 + Math.random() * 1.1) + 'px';
-        const fireflySize = (1.8 + Math.random() * 3.6) + 'px';
-        const width = particleStyle === 'rain' ? rainWidth : particleStyle === 'firefly' ? fireflySize : size;
-        const height = particleStyle === 'rain' ? rainHeight : particleStyle === 'firefly' ? fireflySize : size;
-        const borderRadius = particleStyle === 'rain' ? '2px' : '50%';
-        const animationName = particleStyle === 'rain' ? 'vf-particle-rain' : particleStyle === 'firefly' ? 'vf-particle-firefly' : 'vf-particle-fall';
-        const particleBg = particleStyle === 'rain'
-            ? `linear-gradient(to bottom, rgba(220, 235, 255, ${opacity * 0.2}), rgba(195, 225, 255, ${Math.min(1, opacity * 1.2)}))`
-            : particleStyle === 'firefly'
-                ? `radial-gradient(circle, rgba(255, 250, 176, ${Math.min(1, opacity + 0.25)}) 0%, rgba(255, 228, 130, ${Math.max(0.18, opacity * 0.7)}) 58%, rgba(255, 210, 120, 0) 100%)`
-                : `radial-gradient(circle, rgba(255,255,255,${Math.min(1, opacity + 0.25)}) 0%, rgba(229, 242, 255, ${Math.max(0.25, opacity * 0.85)}) 65%, rgba(210,230,255,0) 100%)`;
-        const shadow = 'none';
-        const blurFilter = particleStyle === 'firefly'
-            ? '0.2px'
-            : blur;
-        const filterDeclaration = blurFilter === '0' ? 'none' : `blur(${blurFilter})`;
-        const zIndex = particleStyle === 'firefly' ? 5 : 4;
-        const opacityScale = particleStyle === 'firefly' ? (0.38 + Math.random() * 0.5) : 1;
-        const duration = particleStyle === 'firefly'
-            ? Math.max(3.2, (effectiveSpeed * 1.85) + (Math.random() * 3.2))
-            : effectiveSpeed;
-
-        particle.style.cssText = `
-            position: absolute;
-            left: ${startX}%;
-            top: ${startY}%;
-            width: ${width};
-            height: ${height};
-            border-radius: ${borderRadius};
-            background: ${particleBg};
-            box-shadow: ${shadow};
-            filter: ${filterDeclaration};
-            z-index: ${zIndex};
-            opacity: ${opacityScale};
-            pointer-events: none;
-            contain: paint;
-            will-change: transform, opacity;
-            transform: translate3d(0, 0, 0);
-            animation: ${animationName} ${duration}s linear infinite;
-            animation-delay: ${delay}s;
-            --drift-x: ${driftX}px;
-            --vf-particle-wander-x: ${(Math.random() - 0.5) * (particleStyle === 'firefly' ? 200 : 80)}px;
-            --vf-particle-wander-y: ${(Math.random() - 0.5) * (particleStyle === 'firefly' ? 160 : 54)}px;
-            --vf-firefly-glow: ${fireflyGlow.toFixed(2)};
-        `;
-        
-        effectsLayer.appendChild(particle);
-        activeOverlayElements.particles.push(particle);
-    }
 }
 
 function startHypnoWhispers() {
@@ -1770,6 +2028,8 @@ function pauseOverlayVisualLoops() {
     stopHypnoEasterEggs();
     stopCallBreathCueLoop(false);
     stopCallWaveformAnimation(false);
+    stopOverlayCssMotion();
+    stopOverlaySpiralCanvas(true);
 }
 
 function resumeOverlayVisualLoopsIfAllowed() {
@@ -1794,6 +2054,8 @@ function resumeOverlayVisualLoopsIfAllowed() {
     }
 
     startCallBreathCueLoop();
+    startOverlayCssMotion();
+    startOverlaySpiralCanvas();
     startHypnoWhispers();
     startHypnoParticles();
     startHypnoEasterEggs();
@@ -2388,7 +2650,7 @@ function isHypnoFeatureEnabled(settingKey) {
 
 function getHypnoParticleCount() {
     const isMobile = window.matchMedia('(max-width: 768px), (max-height: 700px)').matches;
-    return isMobile ? 60 : 150;
+    return isMobile ? 36 : 90;
 }
 
 function getHypnoParticleFallRate() {
@@ -3206,18 +3468,10 @@ async function getWeatherContextText() {
     const fetchGeneration = ++weatherFetchGeneration;
     weatherFetchPromise = (async () => {
         const units = getWeatherUnitsForLocale();
-        const manualCity = String(settings.weatherManualCity || '').trim();
         let coords = await getBrowserGeolocationCoords();
         let label = '';
         if (coords) {
             label = await reverseGeocodeCoords(coords);
-        }
-        if (!coords && manualCity) {
-            const fallback = await geocodeManualCity(manualCity);
-            if (fallback) {
-                coords = { latitude: fallback.latitude, longitude: fallback.longitude };
-                label = fallback.label;
-            }
         }
         if (!coords) {
             return '';
@@ -3484,16 +3738,15 @@ function refreshWaveformBars() {
 let waveformLastFrameAt = 0;
 const WAVEFORM_FRAME_INTERVAL_MS = 1000 / 30;
 
-function updateCallWaveformFrame() {
+function updateCallWaveformFrame(ts = performance.now()) {
     if (!callActive || isDocumentHidden()) {
         waveformAnimationFrameId = null;
-        return;
+        return false;
     }
 
-    const now = performance.now();
+    const now = Number.isFinite(ts) ? ts : performance.now();
     if (waveformLastFrameAt !== 0 && (now - waveformLastFrameAt) < WAVEFORM_FRAME_INTERVAL_MS) {
-        waveformAnimationFrameId = requestAnimationFrame(updateCallWaveformFrame);
-        return;
+        return true;
     }
     waveformLastFrameAt = now;
 
@@ -3505,10 +3758,9 @@ function updateCallWaveformFrame() {
         const hasWaveformUi = !!document.querySelector('#voiceforge_call_overlay .vf-call-waveform');
         if (!hasWaveformUi) {
             waveformAnimationFrameId = null;
-            return;
+            return false;
         }
-        waveformAnimationFrameId = requestAnimationFrame(updateCallWaveformFrame);
-        return;
+        return true;
     }
 
     const measuredLevel = getTtsOutputLevel();
@@ -3523,6 +3775,12 @@ function updateCallWaveformFrame() {
         waveformLevelSmoothed += (targetLevel - waveformLevelSmoothed) * smoothing;
     } else {
         waveformLevelSmoothed *= 0.85;
+    }
+
+    const overlay = overlayDomCache.root?.[0] || document.getElementById('voiceforge_call_overlay');
+    if (overlay) {
+        const reactiveLevel = reactiveMode ? Math.max(0, Math.min(1, waveformLevelSmoothed)) : 0;
+        setCachedInlineStyle(overlay, 'vars', '--vf-overlay-reactive-level', reactiveLevel.toFixed(3));
     }
 
     const bars = waveformBars;
@@ -3553,7 +3811,7 @@ function updateCallWaveformFrame() {
         }
     }
 
-    waveformAnimationFrameId = requestAnimationFrame(updateCallWaveformFrame);
+    return true;
 }
 
 function startCallWaveformAnimation() {
@@ -3571,14 +3829,12 @@ function startCallWaveformAnimation() {
             bar.style.animation = 'none';
         }
     }
-    waveformAnimationFrameId = requestAnimationFrame(updateCallWaveformFrame);
+    waveformAnimationFrameId = 1;
+    ensureOverlayAnimationLoop();
 }
 
 function stopCallWaveformAnimation(enableCanned = false) {
-    if (waveformAnimationFrameId) {
-        cancelAnimationFrame(waveformAnimationFrameId);
-        waveformAnimationFrameId = null;
-    }
+    waveformAnimationFrameId = null;
 
     waveformLevelSmoothed = 0;
     waveformLastFrameAt = 0;
@@ -3599,6 +3855,7 @@ function stopCallWaveformAnimation(enableCanned = false) {
             bar.dataset.vfWaveOpacity = '0.35';
         }
     }
+    stopOverlayAnimationLoopIfIdle();
 }
 
 function applyOverlayCallUiVisibility() {
@@ -3940,7 +4197,7 @@ async function startMicLevelTest() {
                 autoGainControl: true,
             },
         });
-        micLevelTestContext = new (window.AudioContext || window.webkitAudioContext)();
+        micLevelTestContext = new window.AudioContext();
         const source = micLevelTestContext.createMediaStreamSource(micLevelTestStream);
         micLevelTestAnalyser = micLevelTestContext.createAnalyser();
         micLevelTestAnalyser.fftSize = 1024;
@@ -4385,12 +4642,8 @@ async function startAudioCapture() {
         }
         
         // Use native sample rate - server handles resampling
-        const AudioContextCtor = window.AudioContext || window.webkitAudioContext;
-        try {
-            audioContext = new AudioContextCtor({ sampleRate: 16000, latencyHint: 'interactive' });
-        } catch (_err) {
-            audioContext = new AudioContextCtor({ latencyHint: 'interactive' });
-        }
+        const AudioContextCtor = window.AudioContext;
+        audioContext = new AudioContextCtor({ sampleRate: 16000, latencyHint: 'interactive' });
         if (audioContext.state === 'suspended') {
             await audioContext.resume().catch(() => {});
         }
@@ -7064,7 +7317,9 @@ function hideCallOverlay() {
         overlayVisualRefreshFrameId = null;
     }
     stopCallWaveformAnimation(false);
-stopCallBreathCueLoop(true);
+    stopOverlayCssMotion();
+    removeOverlaySpiralCanvas();
+    stopCallBreathCueLoop(true);
     stopCallParticleAmbientLoop(true);
     stopHypnoWhispers();
     stopHypnoEasterEggs();
@@ -7088,6 +7343,12 @@ function clearOverlayDomCache() {
     resetOverlayInlineStyleCache();
     overlayCanvasParticles.canvas = null;
     overlayCanvasParticles.ctx = null;
+    overlaySpiralCanvas.canvas = null;
+    overlaySpiralCanvas.ctx = null;
+    const overlay = document.getElementById('voiceforge_call_overlay');
+    if (overlay?._vfCallRings) {
+        delete overlay._vfCallRings;
+    }
 }
 
 function showCallOverlay() {
@@ -7143,9 +7404,7 @@ function showCallOverlay() {
                     </div>
                     <div class="vf-call-effects-layer">
                         <canvas class="vf-call-particle-canvas"></canvas>
-                        <div class="vf-call-backdrop-layer hypno-rings"></div>
                         <div class="vf-call-backdrop-layer hypno-grid"></div>
-                        <div class="vf-call-backdrop-layer hypno-vortex"></div>
                         <div class="vf-call-vignette"></div>
                     </div>
                     <div class="vf-call-content">
@@ -7175,6 +7434,7 @@ function showCallOverlay() {
             `);
         overlay.append(callUI);
     }
+    const effectsLayer = callUI.find('.vf-call-effects-layer').first();
     overlayDomCache.callUi = callUI;
     syncOverlayDomCache();
 
@@ -7191,11 +7451,15 @@ function showCallOverlay() {
         ensureOverlayParticleCanvas();
         resizeOverlayParticleCanvas(true);
     }
+    ensureOverlaySpiralCanvas();
+    resizeOverlaySpiralCanvas(true);
 
     // Update call status based on current state
     updateCallOverlayStatus();
     applyOverlayCallUiVisibility();
     startCallBreathCueLoop();
+    startOverlayCssMotion();
+    startOverlaySpiralCanvas();
 
     // Ensure subtitles are rendered in the overlay layer while call overlay is active.
     ensureSubtitleElement();

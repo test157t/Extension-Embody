@@ -25,6 +25,7 @@ import { initDeviceExecution, executeCommand, executePattern, executeWaveformPat
 import { parseDeviceCommands, setParserName } from "./command_parser.js"
 import { initModeBuilder } from "./mode_builder.js"
 import { initDynamicCommands } from "./dynamic_commands.js"
+import { initTimerWorker, setWorkerTimeout, setWorkerInterval, clearWorkerTimeout } from "./shared_timers.js"
 import { loadWorldInfo, saveWorldInfo, createNewWorldInfo, updateWorldInfoList, onWorldInfoChange } from "../../../../world-info.js"
 
 const console = { ...globalThis.console }
@@ -131,12 +132,6 @@ let ttsSyncStartTimeoutId = null
 let ttsSyncOffsetTimeoutId = null
 let ttsInterruptGraceTimeoutId = null
 
-// Timer worker for background vibration
-let timerWorker = null
-let workerTimers = new Map()
-let workerTimerId = 0
-let isWorkerTimerRunning = false
-const WORKER_TICK_INTERVAL_MS = 25
 const INTIFACE_DEVICE_LOREBOOK_NAME = 'intiface_device_profiles'
 const INTIFACE_DEVICE_LOREBOOK_TEMPLATE_PATH = '/scripts/extensions/third-party/Extension-Embody/intiface/lorebooks/intiface_device_profiles.json'
 
@@ -276,7 +271,7 @@ function getPollingInterval() {
   return Math.round(1000 / devicePollingRate)
 }
 
-function getErrorMessage(error, fallback = 'unknown error') {
+function getErrorMessage(error) {
   if (error instanceof Error && typeof error.message === 'string' && error.message.trim()) {
     return error.message.trim()
   }
@@ -287,7 +282,7 @@ function getErrorMessage(error, fallback = 'unknown error') {
     const msg = String(error?.message || error?.reason || error?.error || '').trim()
     if (msg) return msg
   }
-  return fallback
+  throw new Error('Unknown error object')
 }
 
 function applyInversion(value) {
@@ -577,7 +572,7 @@ function armTtsSyncGate() {
   ttsSyncStartTimeoutId = setWorkerTimeout(() => {
     ttsSyncStartTimeoutId = null
     if (!ttsSyncWaitingForStart) return
-    releaseTtsSyncGate('fallback')
+    console.warn(`${NAME}: TTS sync start timed out; command queue remains gated`)
   }, aiTtsSyncStartTimeoutMs)
 
   updateAIStatusFromActivity()
@@ -605,107 +600,6 @@ function releaseTtsSyncGate(source = 'tts') {
   }
 
   applyRelease()
-}
-
-// Timer worker functions
-function initTimerWorker() {
-  try {
-    const workerUrl = new URL('background-worker.js', import.meta.url).href
-    timerWorker = new Worker(workerUrl)
-
-    timerWorker.onmessage = (e) => {
-      const { type, timestamp } = e.data
-      if (type === 'tick') {
-        const now = timestamp || Date.now()
-        const timersToExecute = []
-
-        for (const [id, timer] of workerTimers) {
-          if (!timer.callback) continue
-          const timeSinceLast = timer.lastExecuted ? now - timer.lastExecuted : now - timer.createdAt
-          if (timeSinceLast >= timer.interval) {
-            timersToExecute.push(id)
-          }
-        }
-
-        for (const id of timersToExecute) {
-          const timer = workerTimers.get(id)
-          if (timer?.callback) {
-            try {
-              timer.callback()
-              if (!timer.isOneShot) {
-                timer.lastExecuted = now
-              } else {
-                workerTimers.delete(id)
-              }
-            } catch (err) {
-              console.error(`${NAME}: Timer callback error:`, err)
-              workerTimers.delete(id)
-            }
-          }
-        }
-      }
-    }
-
-    timerWorker.onerror = (err) => {
-      console.error(`${NAME}: Timer worker error:`, err)
-      timerWorker = null
-      isWorkerTimerRunning = false
-    }
-
-    console.log(`${NAME}: Timer worker initialized successfully`)
-  } catch (e) {
-    console.error(`${NAME}: Failed to initialize timer worker:`, e)
-    timerWorker = null
-  }
-}
-
-function setWorkerTimeout(callback, delay) {
-  if (timerWorker && delay >= 50) {
-    const id = ++workerTimerId
-    const now = Date.now()
-    workerTimers.set(id, { callback, interval: delay, createdAt: now, lastExecuted: null, isOneShot: true })
-
-    if (!isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'start', data: { interval: WORKER_TICK_INTERVAL_MS } })
-      isWorkerTimerRunning = true
-    }
-
-    return id
-  } else {
-    return setTimeout(callback, delay)
-  }
-}
-
-function setWorkerInterval(callback, delay) {
-  if (timerWorker && delay >= 50) {
-    const id = ++workerTimerId
-    const now = Date.now()
-    workerTimers.set(id, { callback, interval: delay, createdAt: now, lastExecuted: null, isOneShot: false })
-
-    if (!isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'start', data: { interval: WORKER_TICK_INTERVAL_MS } })
-      isWorkerTimerRunning = true
-    }
-
-    return id
-  } else {
-    return setInterval(callback, delay)
-  }
-}
-
-function clearWorkerTimeout(id) {
-  if (typeof id === 'number' && workerTimers.has(id)) {
-    workerTimers.delete(id)
-
-    if (timerWorker && workerTimers.size === 0 && isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'stop' })
-      isWorkerTimerRunning = false
-    }
-  } else if (typeof id === 'number' && id !== 0) {
-    clearInterval(id)
-  } else if (typeof id === 'object' && id !== null) {
-    clearTimeout(id)
-  }
 }
 
 function getDeviceShorthand(dev) {
@@ -742,8 +636,7 @@ function updateAIStatusFromActivity() {
 
   if (hasActivePatterns || isProcessing) {
     statusEl.css("background", "rgba(76, 175, 80, 0.15)")
-    const sourceSuffix = ttsSyncLastReleaseSource === 'fallback' ? ' (timeout fallback)' : ''
-    textEl.css("color", "#4CAF50").text(`AI is controlling your device...${sourceSuffix}`)
+    textEl.css("color", "#4CAF50").text('AI is controlling your device...')
   } else {
     statusEl.css("background", "rgba(0,0,0,0.05)")
     textEl.css("color", "#888").text("AI is ready to control your device via chat commands")
@@ -1308,17 +1201,6 @@ function expandCommandTargetsForExecution(cmd) {
 
   const targetIndexes = resolveDeviceIndexesForTargetChannel(targetChannel)
   if (!targetIndexes.length) {
-    const liveDevices = getConnectedDevices()
-    const fallbackIndex = resolveFallbackIndexForChannelSentinel(Number(cmd?.deviceIndex), Array.isArray(liveDevices) ? liveDevices.length : 0)
-    if (Number.isInteger(fallbackIndex)) {
-      console.warn(`${NAME}: No devices assigned to channel ${targetChannel}; falling back to device index ${fallbackIndex} for target token`)
-      return [{
-        ...cmd,
-        deviceIndex: fallbackIndex,
-        targetChannel,
-        targetFallback: 'channel_to_index',
-      }]
-    }
     return []
   }
 
@@ -1338,11 +1220,11 @@ function decodeCommandEntities(text) {
 
 function classifyTargetToken(rawTarget) {
   const token = String(rawTarget || '').trim().toLowerCase()
-  if (!token) return 'legacy'
+  if (!token) return 'unknown'
   if (token === 'any') return 'canonical_any'
   if (token === 'a' || token === 'b' || token === 'c' || token === 'd') return 'canonical_channel'
   if (token === 'interface' || token === 'system' || token === 'intiface' || token === 'media') return 'system_media'
-  return 'legacy'
+  return 'unknown'
 }
 
 function classifyResolvedTargetFromCommand(cmd) {
@@ -1357,7 +1239,6 @@ function classifyResolvedTargetFromCommand(cmd) {
   ) {
     return 'canonical_channel'
   }
-  if (deviceIndex >= 0) return 'legacy_device_index'
   return 'unknown'
 }
 
@@ -1368,7 +1249,7 @@ function summarizeTargetParsing(text) {
     canonical_any: 0,
     canonical_channel: 0,
     system_media: 0,
-    legacy: 0,
+    unknown: 0,
   }
   const tokens = []
 
@@ -1629,75 +1510,6 @@ function dequeueSpokenSyncCommandForPayload(payload = {}) {
       const animationChunk = Math.max(0, targetSubtitleChunkIndex - CHUNK_SYNC_SUBTITLE_EARLY_LEAD_CHUNKS)
       if (payloadSubtitleChunkIndex < animationChunk) {
         continue
-      }
-    } else if (Number.isFinite(offset)) {
-      // Phase-1 style fallback timing when chunk-index mapping is unavailable.
-      // Use sourceEnd cursor + adaptive lead window.
-      const chunkSpan = Number.isFinite(payloadSourceEnd) && Number.isFinite(payloadSourceStart)
-        ? Math.max(1, payloadSourceEnd - payloadSourceStart)
-        : 0
-      const earlyLeadChars = Number.isFinite(payloadSourceEnd)
-        ? Math.max(
-          CHUNK_SYNC_OFFSET_EARLY_LEAD_MIN,
-          Math.min(
-            CHUNK_SYNC_OFFSET_EARLY_LEAD_MAX,
-            Math.round(chunkSpan * 0.35) + 8 + Math.round(chunkSpan * CHUNK_SYNC_OFFSET_EXTRA_CHUNK_LEAD),
-          ),
-        )
-        : 0
-
-      const cursor = Number.isFinite(payloadSourceEnd) ? payloadSourceEnd : payloadSourceStart
-      if (!Number.isFinite(cursor) || offset > (cursor + earlyLeadChars)) {
-        if (queued?._meta) {
-          queued._meta._offsetArmedChunk = null
-        }
-        continue
-      }
-
-      if (Number.isFinite(payloadSubtitleChunkIndex) && CHUNK_SYNC_FALLBACK_CHUNK_DELAY > 0) {
-        const now = Date.now()
-        const recentlyExecuted = spokenSyncLastExecutionAt > 0 && (now - spokenSyncLastExecutionAt) <= CHUNK_SYNC_RECENT_EXECUTION_WINDOW_MS
-        if (!recentlyExecuted) {
-          if (queued?._meta) {
-            queued._meta._offsetArmedChunk = null
-          }
-          // No recent command fired: do not hold the first eligible command.
-          // Execute as soon as cursor reaches its offset.
-          pendingSpokenSyncCommands.splice(i, 1)
-          if (queued?._syncKey) {
-            pendingSpokenSyncKeys.delete(queued._syncKey)
-          }
-          return queued
-        }
-
-        const armedChunk = Number(queued?._meta?._offsetArmedChunk)
-        if (!Number.isFinite(armedChunk)) {
-          if (queued?._meta) {
-            queued._meta._offsetArmedChunk = payloadSubtitleChunkIndex
-            if (CHUNK_SYNC_DEBUG) {
-              console.debug(`${NAME}: [chunk-sync] fallback armed`, {
-                traceId: queued?._traceId || null,
-                offset,
-                armedChunk: payloadSubtitleChunkIndex,
-                sourceStart: payloadSourceStart,
-                sourceEnd: payloadSourceEnd,
-              })
-            }
-          }
-          continue
-        }
-
-        if (payloadSubtitleChunkIndex < (armedChunk + CHUNK_SYNC_FALLBACK_CHUNK_DELAY)) {
-          if (CHUNK_SYNC_DEBUG) {
-            console.debug(`${NAME}: [chunk-sync] fallback waiting`, {
-              traceId: queued?._traceId || null,
-              armedChunk,
-              requiredChunk: armedChunk + CHUNK_SYNC_FALLBACK_CHUNK_DELAY,
-              currentChunk: payloadSubtitleChunkIndex,
-            })
-          }
-          continue
-        }
       }
     } else {
       continue

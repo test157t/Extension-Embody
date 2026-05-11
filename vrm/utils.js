@@ -98,50 +98,39 @@ async function getExpressionsList() {
         return [...expressionsList, ...extension_settings.expressions.custom].filter(onlyUnique);
     }
 
-    /**
-     * Returns the list of expressions from the API or fallback in offline mode.
-     * @returns {Promise<string[]>}
-     */
     async function resolveExpressionsList() {
-        // See if we can retrieve a specific expression list from the API
-        try {
-            // Check Extras api first, if enabled and that module active
-            if (extension_settings.expressions.api == EXPRESSION_API.extras && modules.includes('classify')) {
-                const url = new URL(getApiUrl());
-                url.pathname = '/api/classify/labels';
+        if (extension_settings.expressions.api == EXPRESSION_API.extras && modules.includes('classify')) {
+            const url = new URL(getApiUrl());
+            url.pathname = '/api/classify/labels';
 
-                const apiResult = await doExtrasFetch(url, {
-                    method: 'GET',
-                    headers: { 'Bypass-Tunnel-Reminder': 'bypass' },
-                });
+            const apiResult = await doExtrasFetch(url, {
+                method: 'GET',
+                headers: { 'Bypass-Tunnel-Reminder': 'bypass' },
+            });
 
-                if (apiResult.ok) {
-
-                    const data = await apiResult.json();
-                    expressionsList = data.labels;
-                    return expressionsList;
-                }
+            if (apiResult.ok) {
+                const data = await apiResult.json();
+                expressionsList = data.labels;
+                return expressionsList;
             }
-
-            // If running the local classify model (not using the LLM), we ask that one
-            if (extension_settings.expressions.api == EXPRESSION_API.local) {
-                const apiResult = await fetch('/api/extra/classify/labels', {
-                    method: 'POST',
-                    headers: getRequestHeaders(),
-                });
-
-                if (apiResult.ok) {
-                    const data = await apiResult.json();
-                    expressionsList = data.labels;
-                    return expressionsList;
-                }
-            }
-        } catch (error) {
-            console.log(error);
+            throw new Error('Could not load Extras expression labels');
         }
 
-        // If there was no specific list, or an error, just return the default expressions
-        return CLASSIFY_EXPRESSIONS;
+        if (extension_settings.expressions.api == EXPRESSION_API.local) {
+            const apiResult = await fetch('/api/extra/classify/labels', {
+                method: 'POST',
+                headers: getRequestHeaders(),
+            });
+
+            if (apiResult.ok) {
+                const data = await apiResult.json();
+                expressionsList = data.labels;
+                return expressionsList;
+            }
+            throw new Error('Could not load local expression labels');
+        }
+
+        throw new Error('Expression label list requires a configured classifier API');
     }
 
     const result = await resolveExpressionsList();
@@ -195,7 +184,7 @@ async function getExpressionLabel(text) {
     // Return if text is undefined, saving a costly fetch request
     //if ((!modules.includes('classify') && !extension_settings.expressions.local) || !text) {
     if ((!modules.includes('classify') && extension_settings.expressions.api == EXPRESSION_API.extras) || !text) {
-        return FALLBACK_EXPRESSION;
+        throw new Error('Expression classification requires text and an available classifier module');
     }
 
     if (extension_settings.expressions.translate && typeof window['translate'] === 'function') {
@@ -250,22 +239,24 @@ async function getExpressionLabel(text) {
     } catch (error) {
         toastr.info('Could not classify expression. Check the console or your backend for more information.');
         console.error(error);
-        return FALLBACK_EXPRESSION;
+        throw error;
     }
+
+    throw new Error('Expression classifier did not return a label');
 }
 
 /**
  * Parses the emotion response from the LLM API.
  * @param {string} emotionResponse The response from the LLM API.
  * @param {string[]} labels A list of labels to search for.
- * @returns {string} The parsed emotion or the fallback expression.
+ * @returns {string} The parsed emotion.
  */
 function parseLlmResponse(emotionResponse, labels) {
-    const fallbackExpression = FALLBACK_EXPRESSION;
-
     try {
         const parsedEmotion = JSON.parse(emotionResponse);
-        return parsedEmotion?.emotion ?? fallbackExpression;
+        if (parsedEmotion?.emotion) {
+            return parsedEmotion.emotion;
+        }
     } catch {
         const fuse = new Fuse([emotionResponse]);
         for (const label of labels) {

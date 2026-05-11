@@ -86,6 +86,7 @@ import {
   resetChannelAssignments,
   assignAllDevicesToChannel
 } from "./connected_devices.js"
+import { initTimerWorker, setWorkerTimeout, setWorkerInterval, clearWorkerTimeout, restartWorkerTimer } from "./shared_timers.js"
 
 // @ts-ignore: Hack to suppress IDE errors
 const $ = window.$
@@ -113,12 +114,6 @@ let commandQueueInterval = null // Interval for sequential execution
 let isExecutingCommands = false
 let isStartingIntiface = false // Prevent multiple simultaneous start attempts
 let playModeSequenceTimeouts = new Set() // Track timeouts for play mode sequence cleanup
-
-// Timer worker for background vibration (avoids setTimeout throttling in hidden tabs)
-let timerWorker = null
-let workerTimers = new Map() // timerId -> { callback, interval, createdAt, lastExecuted, isOneShot }
-let workerTimerId = 0
-let isWorkerTimerRunning = false
 
 // Mode settings now managed by PlayModeLoader - uses folder names consistently
 // Proxy provides backwards compatibility for any code expecting modeSettings object
@@ -307,126 +302,6 @@ function applyIntensityScale(values, modeId = null) {
     return Math.min(100, Math.max(0, Math.round(scaled)))
   })
 }
-
-// Initialize timer worker
-function initTimerWorker() {
-  try {
-    const workerUrl = new URL('timer-worker.js', import.meta.url).href
-    timerWorker = new Worker(workerUrl)
-
-    timerWorker.onmessage = (e) => {
-      const { type, drift, timerId: workerTimerId_, timestamp } = e.data
-      if (type === 'tick') {
-        // Execute callbacks for timers that are due
-        const now = timestamp || Date.now()
-        const timersToExecute = []
-
-        for (const [id, timer] of workerTimers) {
-          if (!timer.callback) continue
-
-          // Check if this timer is due to execute
-          const timeSinceCreationOrLast = timer.lastExecuted ? now - timer.lastExecuted : now - timer.createdAt
-          const isDue = timeSinceCreationOrLast >= timer.interval
-
-          if (isDue) {
-            timersToExecute.push(id)
-          }
-        }
-
-        // Execute all due timers
-        for (const id of timersToExecute) {
-          const timer = workerTimers.get(id)
-          if (timer && timer.callback) {
-            try {
-              timer.callback()
-              if (!timer.isOneShot) {
-                // For repeating timers, update lastExecuted time
-                timer.lastExecuted = now
-              } else {
-                // For one-shot timers, remove them
-                workerTimers.delete(id)
-              }
-            } catch (err) {
-              console.error(`${NAME}: Timer callback error:`, err)
-              workerTimers.delete(id)
-            }
-          }
-        }
-      } else if (type === 'heartbeat') {
-        // Keep worker alive
-      }
-    }
-    
-    timerWorker.onerror = (err) => {
-      console.error(`${NAME}: Timer worker error:`, err)
-      timerWorker = null
-      isWorkerTimerRunning = false
-    }
-    
-    console.log(`${NAME}: Timer worker initialized successfully`)
-  } catch (e) {
-    console.error(`${NAME}: Failed to initialize timer worker:`, e)
-    timerWorker = null
-  }
-}
-
-// Set timeout using worker (if available) or fall back to regular setTimeout
-function setWorkerTimeout(callback, delay) {
-  if (timerWorker && delay >= 50) {
-    const id = ++workerTimerId
-    const now = Date.now()
-    workerTimers.set(id, { callback, interval: delay, createdAt: now, lastExecuted: null, isOneShot: true })
-
-    // Only start the worker timer if not already running
-    if (!isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'start', data: { interval: delay } })
-      isWorkerTimerRunning = true
-    }
-
-    return id
-  } else {
-    return setTimeout(callback, delay)
-  }
-}
-
-// Set interval using worker
-function setWorkerInterval(callback, delay) {
-  if (timerWorker && delay >= 50) {
-    const id = ++workerTimerId
-    const now = Date.now()
-    workerTimers.set(id, { callback, interval: delay, createdAt: now, lastExecuted: null, isOneShot: false })
-
-    // Only start the worker timer if not already running
-    if (!isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'start', data: { interval: delay } })
-      isWorkerTimerRunning = true
-    }
-
-    return id
-  } else {
-    return setInterval(callback, delay)
-  }
-}
-
-// Clear worker timeout/interval
-function clearWorkerTimeout(id) {
-  if (typeof id === 'number' && workerTimers.has(id)) {
-    workerTimers.delete(id)
-
-    // If no more timers, stop the worker
-    if (timerWorker && workerTimers.size === 0 && isWorkerTimerRunning) {
-      timerWorker.postMessage({ command: 'stop' })
-      isWorkerTimerRunning = false
-    }
-  } else if (typeof id === 'number' && id !== 0) {
-    // It's a native setInterval ID (not in workerTimers)
-    clearInterval(id)
-  } else if (typeof id === 'object' && id !== null) {
-    // It's a regular timeout ID
-    clearTimeout(id)
-  }
-}
-
 
 // Initialize playback system with required dependencies
 initPlaybackSystem({
@@ -713,65 +588,7 @@ console.log(`${NAME}: Ignoring out-of-range media intensity: ${intensity}%`)
       continue
     }
     
-    // Try old JSON format as fallback
-    try {
-      const jsonText = commandText.startsWith('{') ? commandText : `{${commandText}}`
-      const command = JSON.parse(jsonText)
-      
-      if (command.VIBRATE !== undefined) {
-        if (typeof command.VIBRATE === 'number') {
-          commands.push({
-            type: 'vibrate',
-            intensity: Math.max(0, Math.min(100, command.VIBRATE)),
-            motorIndex: 0,
-            deviceIndex: targetDeviceIndex
-          })
-        } else if (typeof command.VIBRATE === 'object') {
-          commands.push({
-            type: 'vibrate_pattern',
-            pattern: command.VIBRATE.pattern || [50],
-            intervals: command.VIBRATE.interval || [1000],
-            loop: command.VIBRATE.loop,
-            deviceIndex: targetDeviceIndex
-          })
-        }
-      }
-      
-      if (command.OSCILLATE !== undefined) {
-        if (typeof command.OSCILLATE === 'number') {
-          commands.push({
-            type: 'oscillate',
-            intensity: Math.max(0, Math.min(100, command.OSCILLATE)),
-            deviceIndex: targetDeviceIndex
-          })
-        } else if (typeof command.OSCILLATE === 'object') {
-          commands.push({
-            type: 'oscillate_pattern',
-            pattern: command.OSCILLATE.pattern || [50],
-            intervals: command.OSCILLATE.interval || [1000],
-            loop: command.OSCILLATE.loop,
-            deviceIndex: targetDeviceIndex
-          })
-        }
-      }
-      
-      if (command.LINEAR !== undefined && typeof command.LINEAR === 'object') {
-        commands.push({
-          type: 'linear',
-          startPos: command.LINEAR.start_position || 0,
-          endPos: command.LINEAR.end_position || 100,
-          duration: command.LINEAR.duration || 1000,
-          deviceIndex: targetDeviceIndex
-        })
-      }
-      
-      if (command.STOP !== undefined) {
-        commands.push({ type: 'stop' })
-      }
-    } catch (e) {
-      // Command not recognized
-      console.log(`${NAME}: Unrecognized command format: ${commandText}`)
-    }
+    console.log(`${NAME}: Unrecognized command format: ${commandText}`)
   }
   
   return commands
@@ -3281,8 +3098,8 @@ $(async () => {
     // @ts-ignore
     buttplug = window.buttplug
 
-// Initialize timer worker for background vibration (prevents throttling in hidden tabs)
-    initTimerWorker()
+    // Initialize timer worker for background vibration (prevents throttling in hidden tabs)
+    initTimerWorker({ workerFile: 'timer-worker.js', tickIntervalMs: null, requireWorkerTimeout: true })
 
     // Load global inversion setting
     loadGlobalInvert()
@@ -4547,15 +4364,8 @@ document.addEventListener('visibilitychange', async () => {
     console.log(`${NAME}: Tab visible again after ${awayTime}ms`)
 
     // Restart worker timer if it was running (to ensure proper timing after visibility change)
-    if (timerWorker && isWorkerTimerRunning && workerTimers.size > 0) {
+    if (restartWorkerTimer(100)) {
       console.log(`${NAME}: Restarting worker timer for background patterns`)
-      timerWorker.postMessage({ command: 'stop' })
-      isWorkerTimerRunning = false
-
-      // Use the shortest interval from active timers
-      const shortestInterval = Math.min(...Array.from(workerTimers.values()).map(t => t.interval))
-      timerWorker.postMessage({ command: 'start', data: { interval: Math.max(shortestInterval, 100) } })
-      isWorkerTimerRunning = true
     }
 
     // Switch back to RAF when tab is visible
