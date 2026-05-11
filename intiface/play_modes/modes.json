@@ -3,16 +3,6 @@
   "description": "Manifest of available play modes. Each mode corresponds to a folder in the play_modes directory.",
   "modes": [
     "basic",
-    "denial",
-    "milking",
-    "training",
-    "robotic",
-    "sissy",
-    "prejac",
-    "evil",
-    "frustration",
-    "hypno",
-    "chastity"
   ],
   "notes": [
     "Each mode folder must contain a mode.json file with metadata",
