@@ -21,5 +21,5 @@ Run the VoiceForge server, then configure Embody's VoiceForge settings inside Si
 ## Notes
 
 - VoiceForge call mode and VRM lip sync work best when TTS audio is played through SillyTavern so the extension can analyze the audible Web Audio stream.
-- VRM models and animations should be placed in the SillyTavern user asset folders described in `vrm/README.md`.
+- VRM models and animations should be placed in the SillyTavern user asset folders.
 - Intiface support requires Intiface Central or a compatible Buttplug websocket server.
