@@ -3985,8 +3985,13 @@ async function initVoiceMapInternal(unrestricted) {
             }
         }
 
-        // Create entry with saved or default settings
+        // Keep Default Voice internal for inheritance/server config, but do not render it in the UI.
         const voiceMapEntry = new VoiceMapEntry(character, savedSettings);
+        if (character === DEFAULT_VOICE_MARKER) {
+            voiceMapEntries.push(voiceMapEntry);
+            continue;
+        }
+
         voiceMapEntry.addUI(audioPrompts, rvcModels, bgTracks);
         voiceMapEntries.push(voiceMapEntry);
     }
