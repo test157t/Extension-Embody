@@ -71,6 +71,10 @@
                             <input type="checkbox" id="tts_skip_tags">
                             <small>Skip HTML tags</small>
                         </label>
+                        <label class="checkbox_label" for="tts_skip_reasoning">
+                            <input type="checkbox" id="tts_skip_reasoning">
+                            <small>Skip reasoning blocks (active ST delimiters)</small>
+                        </label>
                     </div>
                 </div>
             </div>
@@ -84,6 +88,15 @@
                     <i id="tts_voicemap_toggle_icon" class="fa-solid fa-chevron-down"></i>
                 </div>
                 <div id="tts_voicemap_content" style="display: none; margin-top: 8px;">
+                    <div class="voiceforge-map-tools" style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+                        <button type="button" id="voiceforge_export_map" class="menu_button" title="Copy the full VoiceForge voice map JSON to clipboard">
+                            <i class="fa-solid fa-copy"></i> Export Map
+                        </button>
+                        <button type="button" id="voiceforge_import_map" class="menu_button" title="Merge VoiceForge voice map JSON from clipboard">
+                            <i class="fa-solid fa-paste"></i> Import Map
+                        </button>
+                    </div>
+                    <small class="text_muted">Export/import the full map for migration or recovery. Import merges by character name and does not clear existing entries.</small>
                     <div id="tts_voicemap_block">
                         <!-- Voice map entries will be dynamically inserted here -->
                     </div>

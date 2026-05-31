@@ -42,6 +42,8 @@ let streamingTtsCompletedMessageId = null; // Message ID for which streaming com
 let streamingTtsQuoteStack = [];
 let streamingTtsInAsteriskBlock = false;
 let streamingTtsInAngleTag = false; // Tracks open <...> fragments across streamed chunks
+let streamingTtsInReasoningBlock = false; // Tracks open reasoning delimiters across streamed chunks
+let streamingTtsReasoningCarry = ''; // Holds possible partial reasoning delimiters between streamed chunks
 let streamingTtsPendingText = ''; // Filtered streamed text waiting for the next chunk-size boundary
 let streamingTtsPendingRawText = '';
 let streamingTtsPendingSourceStart = null;
@@ -1257,6 +1259,98 @@ function applyAngleTagMask(text, initialInAngleTag = false) {
     return { text: masked, inAngleTag };
 }
 
+function getActiveReasoningDelimiters() {
+    const contextPowerUser = getContext()?.powerUserSettings || {};
+    const contextReasoning = contextPowerUser.reasoning || {};
+    const fallbackReasoning = power_user?.reasoning || {};
+    const prefix = String(contextReasoning.prefix ?? fallbackReasoning.prefix ?? '').trim();
+    const suffix = String(contextReasoning.suffix ?? fallbackReasoning.suffix ?? '').trim();
+    return { prefix, suffix };
+}
+
+function stripReasoningBlocks(text, initialInReasoning = false) {
+    const source = String(text || '');
+    const { prefix, suffix } = getActiveReasoningDelimiters();
+
+    if (!source || !prefix || !suffix || prefix === suffix) {
+        return { text: source, inReasoning: !!initialInReasoning };
+    }
+
+    let inReasoning = !!initialInReasoning;
+    let cursor = 0;
+    let output = '';
+
+    while (cursor < source.length) {
+        if (inReasoning) {
+            const closeIndex = source.indexOf(suffix, cursor);
+            if (closeIndex === -1) {
+                return { text: output, inReasoning: true };
+            }
+            cursor = closeIndex + suffix.length;
+            inReasoning = false;
+            continue;
+        }
+
+        const openIndex = source.indexOf(prefix, cursor);
+        if (openIndex === -1) {
+            output += source.slice(cursor);
+            break;
+        }
+
+        output += source.slice(cursor, openIndex);
+        cursor = openIndex + prefix.length;
+        inReasoning = true;
+    }
+
+    return { text: output, inReasoning };
+}
+
+function getTrailingDelimiterFragmentLength(text, delimiter) {
+    const source = String(text || '');
+    const marker = String(delimiter || '');
+    if (!source || !marker) {
+        return 0;
+    }
+
+    const maxLen = Math.min(source.length, marker.length - 1);
+    for (let len = maxLen; len > 0; len--) {
+        if (source.endsWith(marker.slice(0, len))) {
+            return len;
+        }
+    }
+    return 0;
+}
+
+function stripReasoningBlocksStreaming(text, inReasoning = false, carry = '') {
+    const source = `${String(carry || '')}${String(text || '')}`;
+    const { prefix, suffix } = getActiveReasoningDelimiters();
+
+    if (!source || !prefix || !suffix || prefix === suffix) {
+        return { text: source, inReasoning: !!inReasoning, carry: '' };
+    }
+
+    const filtered = stripReasoningBlocks(source, inReasoning);
+    let output = filtered.text;
+    let nextCarry = '';
+
+    if (!filtered.inReasoning) {
+        const overlap = getTrailingDelimiterFragmentLength(source, prefix);
+        if (overlap > 0) {
+            nextCarry = source.slice(source.length - overlap);
+            if (output.endsWith(nextCarry)) {
+                output = output.slice(0, output.length - nextCarry.length);
+            }
+        }
+    } else {
+        const overlap = getTrailingDelimiterFragmentLength(source, suffix);
+        if (overlap > 0) {
+            nextCarry = source.slice(source.length - overlap);
+        }
+    }
+
+    return { text: output, inReasoning: filtered.inReasoning, carry: nextCarry };
+}
+
 function getTrailingCommandTagLength(text, startIndex = 0) {
     const source = String(text || '');
     let cursor = Math.max(0, Number(startIndex) || 0);
@@ -1568,6 +1662,10 @@ function processTtsQueue() {
     }
     
     text = substituteParams(text);
+
+    if (extension_settings.tts.skip_reasoning !== false) {
+        text = stripReasoningBlocks(text, false).text;
+    }
     
     // Strip trailing periods/ellipsis after parameter substitution
     text = text.replace(/\.+\s*$/, '').trim();
@@ -1838,6 +1936,7 @@ function loadSettings() {
     $('#tts_skip_codeblocks').prop('checked', extension_settings.tts.skip_codeblocks);
     $('#tts_skip_tags').prop('checked', extension_settings.tts.skip_tags);
     $('#tts_skip_brackets').prop('checked', extension_settings.tts.skip_brackets);
+    $('#tts_skip_reasoning').prop('checked', extension_settings.tts.skip_reasoning !== false);
     $('#playback_rate').val(extension_settings.tts.playback_rate);
     $('#playback_rate_counter').val(Number(extension_settings.tts.playback_rate).toFixed(2));
 
@@ -1857,6 +1956,7 @@ const defaultSettings = {
     skip_codeblocks: true,
     skip_tags: false,
     skip_brackets: false,           // Ignore [text inside brackets]
+    skip_reasoning: true,
     generation_metadata_prefix: false,
 };
 
@@ -1922,6 +2022,11 @@ function onSkipTagsClick() {
 
 function onSkipBracketsClick() {
     extension_settings.tts.skip_brackets = !!$('#tts_skip_brackets').prop('checked');
+    saveSettingsDebounced();
+}
+
+function onSkipReasoningClick() {
+    extension_settings.tts.skip_reasoning = !!$('#tts_skip_reasoning').prop('checked');
     saveSettingsDebounced();
 }
 
@@ -2372,6 +2477,8 @@ function initStreamingTts(messageId, charName) {
     streamingTtsQuoteStack = [];
     streamingTtsInAsteriskBlock = false;
     streamingTtsInAngleTag = false;
+    streamingTtsInReasoningBlock = false;
+    streamingTtsReasoningCarry = '';
     clearStreamingTtsPendingChunk();
     currentNarratingMessageId = normalizedMessageId;
     
@@ -2403,7 +2510,15 @@ async function processStreamingTtsBuffer() {
 
     streamingTtsLastProcessedIndex = streamingTtsBuffer.length;
 
-    const filteredChunk = filterStreamingTextForSpeech(unprocessedChunk)
+    let chunkForSpeech = unprocessedChunk;
+    if (extension_settings.tts.skip_reasoning !== false) {
+        const reasoningFiltered = stripReasoningBlocksStreaming(chunkForSpeech, streamingTtsInReasoningBlock, streamingTtsReasoningCarry);
+        chunkForSpeech = reasoningFiltered.text;
+        streamingTtsInReasoningBlock = reasoningFiltered.inReasoning;
+        streamingTtsReasoningCarry = reasoningFiltered.carry;
+    }
+
+    let filteredChunk = filterStreamingTextForSpeech(chunkForSpeech)
         .replace(/!\[[\s\S]*?\]\([\s\S]*?\)/g, '')
         .replace(/!\[[\s\S]*?\]\([\s\S]*$/g, '')
         .replace(/```+/g, '')
@@ -2611,6 +2726,13 @@ async function finalizeStreamingTts() {
     // Process any remaining unprocessed text
     const rawRemainingText = streamingTtsBuffer.slice(streamingTtsLastProcessedIndex).trim();
     let remainingText = applyAngleTagMask(rawRemainingText, streamingTtsInAngleTag).text.trim();
+
+    if (extension_settings.tts.skip_reasoning !== false && remainingText.length > 0) {
+        const reasoningFiltered = stripReasoningBlocksStreaming(remainingText, streamingTtsInReasoningBlock, streamingTtsReasoningCarry);
+        remainingText = reasoningFiltered.text.trim();
+        streamingTtsInReasoningBlock = reasoningFiltered.inReasoning;
+        streamingTtsReasoningCarry = reasoningFiltered.carry;
+    }
     
     // Strip trailing ellipsis from remaining text
     remainingText = remainingText.replace(/\.+\s*$/, '').trim();
@@ -2706,6 +2828,8 @@ async function finalizeStreamingTts() {
     streamingTtsSentenceCount = 0;
     streamingTtsQuoteStack = [];
     streamingTtsInAsteriskBlock = false;
+    streamingTtsInReasoningBlock = false;
+    streamingTtsReasoningCarry = '';
     clearStreamingTtsPendingChunk();
     
     console.debug('[VoiceForge] Streaming TTS finalized');
@@ -2729,6 +2853,8 @@ function resetStreamingTts() {
     streamingTtsInAsteriskBlock = false;
     clearStreamingTtsPendingChunk();
     streamingTtsInAngleTag = false;
+    streamingTtsInReasoningBlock = false;
+    streamingTtsReasoningCarry = '';
 }
 
 async function onPeriodicMessageGenerationTick() {
@@ -2870,6 +2996,79 @@ function updateVoiceMap() {
     Object.assign(extension_settings.tts[PROVIDER_NAME].voiceMap, voiceMap);
     saveSettingsDebounced();
 }
+
+function getStoredVoiceMap() {
+    if (!extension_settings.tts[PROVIDER_NAME].voiceMap || typeof extension_settings.tts[PROVIDER_NAME].voiceMap !== 'object') {
+        extension_settings.tts[PROVIDER_NAME].voiceMap = {};
+    }
+    updateVoiceMap();
+    return extension_settings.tts[PROVIDER_NAME].voiceMap;
+}
+
+function extractVoiceMapImport(input) {
+    const value = typeof input === 'string' ? JSON.parse(input) : input;
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        throw new Error('Import must be a voice map object or JSON string.');
+    }
+    if (value.tts?.[PROVIDER_NAME]?.voiceMap) return value.tts[PROVIDER_NAME].voiceMap;
+    if (value[PROVIDER_NAME]?.voiceMap) return value[PROVIDER_NAME].voiceMap;
+    if (value.voiceMap) return value.voiceMap;
+    return value;
+}
+
+async function copyTextToClipboard(text) {
+    if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+        return;
+    }
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.left = '-9999px';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    document.execCommand('copy');
+    textarea.remove();
+}
+
+async function readTextFromClipboard() {
+    if (navigator.clipboard?.readText) return navigator.clipboard.readText();
+    return window.prompt('Paste VoiceForge voice map JSON:') || '';
+}
+
+async function exportVoiceMapToClipboard() {
+    const text = JSON.stringify(getStoredVoiceMap(), null, 2);
+    await copyTextToClipboard(text);
+    toastr.success('VoiceForge voice map copied to clipboard.', 'VoiceForge');
+}
+
+async function importVoiceMapFromClipboard() {
+    const text = await readTextFromClipboard();
+    if (!text.trim()) return;
+
+    const importedMap = extractVoiceMapImport(text);
+    if (!importedMap || typeof importedMap !== 'object' || Array.isArray(importedMap)) {
+        throw new Error('No voiceMap object found in clipboard JSON.');
+    }
+
+    if (!extension_settings.tts[PROVIDER_NAME].voiceMap || typeof extension_settings.tts[PROVIDER_NAME].voiceMap !== 'object') {
+        extension_settings.tts[PROVIDER_NAME].voiceMap = {};
+    }
+
+    const beforeCount = Object.keys(extension_settings.tts[PROVIDER_NAME].voiceMap).length;
+    Object.assign(extension_settings.tts[PROVIDER_NAME].voiceMap, importedMap);
+    voiceMap = { ...extension_settings.tts[PROVIDER_NAME].voiceMap };
+    saveSettingsDebounced();
+    await initVoiceMap(false);
+
+    const importedCount = Object.keys(importedMap).length;
+    const afterCount = Object.keys(extension_settings.tts[PROVIDER_NAME].voiceMap).length;
+    toastr.success(`Imported ${importedCount} entries. Map now has ${afterCount} entries (${beforeCount} before).`, 'VoiceForge');
+}
+
+globalThis.VoiceForgeExportMap = exportVoiceMapToClipboard;
+globalThis.VoiceForgeImportMap = importVoiceMapFromClipboard;
 
 /**
  * Default RVC settings for new voices
@@ -4136,9 +4335,18 @@ jQuery(async function () {
         $('#tts_skip_codeblocks').on('change', onSkipCodeblocksClick);
         $('#tts_skip_tags').on('change', onSkipTagsClick);
         $('#tts_skip_brackets').on('change', onSkipBracketsClick);
+        $('#tts_skip_reasoning').on('change', onSkipReasoningClick);
         $('#tts_auto_generation').on('change', onAutoGenerationClick);
         $('#tts_non_call_enabled').on('change', onNonCallTtsEnabledClick);
         $('#tts_generation_metadata_prefix').on('change', onGenerationMetadataPrefixClick);
+        $('#voiceforge_export_map').on('click', () => exportVoiceMapToClipboard().catch((error) => {
+            console.error('[VoiceForge] Failed to export voice map', error);
+            toastr.error(error?.message || String(error), 'VoiceForge export failed');
+        }));
+        $('#voiceforge_import_map').on('click', () => importVoiceMapFromClipboard().catch((error) => {
+            console.error('[VoiceForge] Failed to import voice map', error);
+            toastr.error(error?.message || String(error), 'VoiceForge import failed');
+        }));
 
         $('#playback_rate').on('input', function () {
             const value = $(this).val();
