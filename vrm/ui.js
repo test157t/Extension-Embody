@@ -1,5 +1,7 @@
-import { saveSettingsDebounced, getRequestHeaders, callPopup } from '../../../../../script.js';
+﻿import { saveSettingsDebounced, getRequestHeaders, callPopup, getCharacters as getSillyTavernCharacters } from '../../../../../script.js';
 import { getContext, extension_settings } from '../../../../extensions.js';
+
+const console = { ...globalThis.console, debug: () => {}, log: () => {}, info: () => {} };
 
 import {
     DEBUG_PREFIX,
@@ -34,7 +36,7 @@ import {
     delay,
     loadAnimationUi,
 } from './utils.js';
-import { exp } from './lib/jsm/nodes/Nodes.js';
+import { exp } from '../lib/jsm/nodes/Nodes.js';
 
 export {
     onEnabledClick,
@@ -58,6 +60,8 @@ export {
     onCharacterChange,
     onCharacterRefreshClick,
     onCharacterRemoveClick,
+    onCharacterMapCopyClick,
+    onCharacterMapPasteClick,
     updateCharactersList,
     updateCharactersListOnce,
     updateCharactersModels,
@@ -78,12 +82,26 @@ export {
 };
 
 let characters_list = [];
+let copiedCharacterMap = null;
 
 let models_files = [];
 let models_files_label = [];
 
 let animations_files = [];
 let animations_groups = [];
+
+function onlyUnique(value, index, array) {
+    return array.indexOf(value) === index;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
 
 function applyModelZIndex(zIndex) {
     const parsed = Number(zIndex);
@@ -257,8 +275,10 @@ async function onCharacterChange() {
 
     if (extension_settings.vrm.character_model_mapping[character] !== undefined) {
         $('#vrm_model_select').val(extension_settings.vrm.character_model_mapping[character]);
-        $('#vrm_model_settings').show();
-        loadModelUi();
+        if (extension_settings.vrm.enabled && extension_settings.vrm.character_model_mapping[character] !== 'none') {
+            $('#vrm_model_settings').show();
+            await loadModelUi();
+        }
     }
 
     $('#vrm_model_div').show();
@@ -268,6 +288,63 @@ async function onCharacterRefreshClick() {
     updateCharactersList();
     $('#vrm_character_select').val('none');
     $('#vrm_character_select').trigger('change');
+}
+
+async function onCharacterMapCopyClick() {
+    const character = String($('#vrm_character_select').val());
+    if (!character || character === 'none') {
+        console.warn(DEBUG_PREFIX, 'No character selected for map copy');
+        return;
+    }
+
+    const sourceModelPath = extension_settings.vrm.character_model_mapping?.[character];
+    if (!sourceModelPath || sourceModelPath === 'none') {
+        console.warn(DEBUG_PREFIX, 'No model mapping found to copy for character', character);
+        return;
+    }
+
+    const sourceModelSettings = extension_settings.vrm.model_settings?.[sourceModelPath] || null;
+    copiedCharacterMap = {
+        sourceCharacter: character,
+        sourceModelPath,
+        modelSettings: sourceModelSettings ? JSON.parse(JSON.stringify(sourceModelSettings)) : null,
+    };
+    console.debug(DEBUG_PREFIX, 'Copied character map from', character, sourceModelPath);
+}
+
+async function onCharacterMapPasteClick() {
+    const character = String($('#vrm_character_select').val());
+    if (!character || character === 'none') {
+        console.warn(DEBUG_PREFIX, 'No target character selected for map paste');
+        return;
+    }
+    if (!copiedCharacterMap) {
+        console.warn(DEBUG_PREFIX, 'No copied character map payload available');
+        return;
+    }
+
+    const selectedModelPath = String($('#vrm_model_select').val() || 'none');
+    const existingModelPath = extension_settings.vrm.character_model_mapping?.[character];
+    const targetModelPath = (selectedModelPath && selectedModelPath !== 'none')
+        ? selectedModelPath
+        : (existingModelPath && existingModelPath !== 'none')
+            ? existingModelPath
+            : copiedCharacterMap.sourceModelPath;
+
+    extension_settings.vrm.character_model_mapping[character] = targetModelPath;
+
+    if (!extension_settings.vrm.model_settings[targetModelPath]) {
+        extension_settings.vrm.model_settings[targetModelPath] = {};
+    }
+
+    if (copiedCharacterMap.modelSettings) {
+        extension_settings.vrm.model_settings[targetModelPath] = JSON.parse(JSON.stringify(copiedCharacterMap.modelSettings));
+    }
+
+    saveSettingsDebounced();
+    await setModel(character, targetModelPath);
+    await onCharacterChange();
+    console.debug(DEBUG_PREFIX, 'Pasted character map to', character, 'target model', targetModelPath, 'from', copiedCharacterMap.sourceCharacter);
 }
 
 async function onCharacterRemoveClick() {
@@ -309,9 +386,6 @@ async function onModelResetClick() {
 }
 
 async function onModelChange() {
-    if (!extension_settings.vrm.enabled)
-        return;
-
     const character = String($('#vrm_character_select').val());
     const model_path = String($('#vrm_model_select').val());
     let use_default_settings = false;
@@ -383,11 +457,11 @@ async function onModelChange() {
         }
     }
 
-    //await loadScene();
-    await setModel(character,model_path);
-    await loadModelUi(use_default_settings);
-    
-    $('#vrm_model_settings').show();
+    if (extension_settings.vrm.enabled) {
+        await setModel(character,model_path);
+        await loadModelUi(use_default_settings);
+        $('#vrm_model_settings').show();
+    }
     $('#vrm_model_loading').hide();
 }
 
@@ -447,6 +521,41 @@ async function onAnimationMappingChange(type) {
     await setMotion(character, motion, true);
 }
 
+function ensureModelSettings(model_path) {
+    if (!extension_settings.vrm.model_settings[model_path]) {
+        extension_settings.vrm.model_settings[model_path] = {
+            'scale': 3.0,
+            'x': 0.0,
+            'y': 0.0,
+            'z': 0.0,
+            'rx': 0.0,
+            'ry': 0.0,
+            'rz': 0.0,
+            'animation_default': { 'expression': 'none', 'motion': 'none' },
+            'classify_mapping': {},
+            'hitboxes_mapping': {},
+            'blend_shape_mapping': {}
+        };
+    }
+
+    const settings = extension_settings.vrm.model_settings[model_path];
+    settings.animation_default ??= { 'expression': 'none', 'motion': 'none' };
+    settings.classify_mapping ??= {};
+    settings.hitboxes_mapping ??= {};
+    settings.blend_shape_mapping ??= {};
+
+    for (const expression of CLASSIFY_EXPRESSIONS) {
+        settings.classify_mapping[expression] ??= { 'expression': 'none', 'motion': 'none', 'sequence': '' };
+        settings.classify_mapping[expression].sequence ??= '';
+    }
+
+    for (const area in HITBOXES) {
+        settings.hitboxes_mapping[area] ??= { 'expression': 'none', 'motion': 'none', 'sequence': '', 'message': '' };
+        settings.hitboxes_mapping[area].sequence ??= '';
+        settings.hitboxes_mapping[area].message ??= '';
+    }
+}
+
 async function loadModelUi(use_default_settings) {
     const character = String($('#vrm_character_select').val());
     const model_path = String($('#vrm_model_select').val());
@@ -458,6 +567,8 @@ async function loadModelUi(use_default_settings) {
 
     if (model_path == "none")
         return;
+
+    ensureModelSettings(model_path);
 
     let model = getVRM(character);
 
@@ -740,16 +851,26 @@ async function updateExpressionMapping(expression) {
 function updateCharactersList() {
     let current_characters = new Set();
     const context = getContext();
-    for (const i of context.characters) {
-        current_characters.add(i.name);
+    if (!Array.isArray(context.characters) || context.characters.length === 0) {
+        getSillyTavernCharacters()
+            .then(() => updateCharactersList())
+            .catch(error => console.warn(DEBUG_PREFIX, 'Failed to force-load SillyTavern characters', error));
     }
-
+    for (const i of context.characters || []) {
+        const name = String(i?.name || '').trim();
+        if (name && i?.avatar) {
+            current_characters.add(name);
+        }
+    }
     current_characters = Array.from(current_characters);
 
     if (current_characters.length == 0)
         return;
 
-    let chat_members = currentChatMembers();
+    const validCharacters = new Set(current_characters);
+    const chat_members = currentChatMembers()
+        .map(name => String(name || '').trim())
+        .filter(name => name && validCharacters.has(name));
     console.debug(DEBUG_PREFIX, 'Chat members', chat_members);
 
     // Sort group character on top
@@ -761,7 +882,7 @@ function updateCharactersList() {
         }
     }
 
-    current_characters = chat_members;
+    current_characters = [...chat_members, ...current_characters].filter(onlyUnique);
 
     if (JSON.stringify(characters_list) !== JSON.stringify(current_characters)) {
         characters_list = current_characters;
@@ -777,8 +898,102 @@ function updateCharactersList() {
             $('#vrm_character_select').append(new Option(charName, charName));
         }
 
+        renderCharacterMapCards();
+
         console.debug(DEBUG_PREFIX, 'Updated character list to:', characters_list);
     }
+}
+
+function renderCharacterMapCards() {
+    const container = $('#vrm_character_map_cards');
+    if (!container.length) return;
+
+    $('#vrm_model_editor_backing').append($('#vrm_model_loading'), $('#vrm_model_div'), $('#vrm_model_settings'));
+    container.empty();
+    const modelOptions = models_files_label.map(([label, path]) => ({ label, path }));
+
+    for (const character of characters_list) {
+        const mappedModel = extension_settings.vrm.character_model_mapping?.[character] || 'none';
+        const mappedLabel = modelOptions.find(option => option.path === mappedModel)?.label || (mappedModel === 'none' ? 'No model mapped' : mappedModel);
+        const optionsHtml = [
+            `<option value="none">No model</option>`,
+            ...modelOptions.map(option => `<option value="${escapeHtml(option.path)}" ${option.path === mappedModel ? 'selected' : ''}>${escapeHtml(option.label)}</option>`),
+        ].join('');
+
+        container.append(`
+            <div class="voiceforge-voice-entry vrm-character-map-card" data-character="${escapeHtml(character)}">
+                <div class="voice-header vrm-character-map-header">
+                    <span class="voice-name">${escapeHtml(character)}</span>
+                    <div class="voice-header-buttons">
+                        <span class="text_muted vrm-card-model-label" style="font-size: 0.8em; margin-right: 6px;">${escapeHtml(mappedLabel)}</span>
+                        <button class="voice-copy-btn menu_button vrm-card-copy" title="Copy VRM map"><i class="fa-solid fa-copy"></i></button>
+                        <button class="voice-paste-btn menu_button vrm-card-paste" title="Paste VRM map"><i class="fa-solid fa-paste"></i></button>
+                        <i class="fa-solid fa-chevron-down voice-toggle-icon"></i>
+                    </div>
+                </div>
+                <div class="voice-content vrm-character-map-content" style="display: none; padding: 10px;">
+                    <div class="voice-setting">
+                        <label>VRM Model:</label>
+                        <select class="text_pole vrm-card-model-select">${optionsHtml}</select>
+                    </div>
+                    <div class="vrm-card-editor-host"></div>
+                </div>
+            </div>
+        `);
+    }
+
+    async function openCard(card) {
+        const character = String(card.data('character'));
+        container.find('.vrm-character-map-card').not(card).find('.vrm-character-map-content').hide();
+        container.find('.vrm-character-map-card').not(card).find('.voice-toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+
+        $('#vrm_character_select').val(character);
+        await onCharacterChange();
+
+        const host = card.find('.vrm-card-editor-host');
+        const editorNodes = $('#vrm_model_loading, #vrm_model_div, #vrm_model_settings').detach();
+        host.empty().append(editorNodes);
+        card.find('.vrm-character-map-content').show().css({ height: 'auto', overflow: 'visible' });
+        card.find('.voice-toggle-icon').removeClass('fa-chevron-down').addClass('fa-chevron-up');
+    }
+
+    container.find('.vrm-character-map-header').off('click').on('click', async function(event) {
+        if ($(event.target).closest('button, select').length) return;
+        const card = $(this).closest('.vrm-character-map-card');
+        if (card.find('.vrm-character-map-content').is(':visible')) {
+            card.find('.vrm-character-map-content').hide();
+            card.find('.voice-toggle-icon').removeClass('fa-chevron-up').addClass('fa-chevron-down');
+            return;
+        }
+        await openCard(card);
+    });
+
+    container.find('.vrm-card-model-select').off('change').on('change', async function() {
+        const card = $(this).closest('.vrm-character-map-card');
+        const character = String(card.data('character'));
+        $('#vrm_character_select').val(character);
+        await onCharacterChange();
+        $('#vrm_model_select').val($(this).val());
+        await onModelChange();
+        const selectedLabel = models_files_label.find(([, path]) => path === String($(this).val()))?.[0] || 'No model mapped';
+        card.find('.vrm-card-model-label').text(selectedLabel);
+        await openCard(card);
+    });
+
+    container.find('.vrm-card-copy').off('click').on('click', async function(event) {
+        event.stopPropagation();
+        const character = String($(this).closest('.vrm-character-map-card').data('character'));
+        $('#vrm_character_select').val(character).trigger('change');
+        await onCharacterMapCopyClick();
+    });
+
+    container.find('.vrm-card-paste').off('click').on('click', async function(event) {
+        event.stopPropagation();
+        const character = String($(this).closest('.vrm-character-map-card').data('character'));
+        $('#vrm_character_select').val(character).trigger('change');
+        await onCharacterMapPasteClick();
+        renderCharacterMapCards();
+    });
 }
 
 async function updateCharactersModels(refreshButton = false) {
@@ -798,6 +1013,8 @@ async function updateCharactersModels(refreshButton = false) {
             models_files_label.push([label,entry]);
         }
     }
+
+    renderCharacterMapCards();
 
     animations_files = assets['vrm']['animation'];
     for(const i in animations_files) {

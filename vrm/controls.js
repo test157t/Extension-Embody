@@ -1,4 +1,4 @@
-import * as THREE from './lib/three.module.js';
+﻿import * as THREE from '../lib/three.module.js';
 import { eventSource, saveSettingsDebounced } from '../../../../../script.js';
 import { extension_settings, getContext } from '../../../../extensions.js';
 
@@ -23,7 +23,7 @@ import {
     markUserActivity,
     syncCharacterCollisionProxies
 } from "./vrm.js";
-import { func } from './lib/jsm/nodes/code/FunctionNode.js';
+import { func } from '../lib/jsm/nodes/code/FunctionNode.js';
 import { delay } from '../../../../utils.js';
 
 // Mouse controls

@@ -1,6 +1,6 @@
-﻿import { saveTtsProviderSettings } from './index.js';
-import { getAudioManager } from './audio.js';
+﻿import { getAudioManager } from './audio.js';
 import { extension_settings } from '../../../../extensions.js';
+import { saveSettingsDebounced } from '../../../../../script.js';
 
 const DISABLED_VOICE_MARKER = 'disabled';
 const DEFAULT_VOICE_MARKER = '[Default Voice]';
@@ -80,7 +80,7 @@ class VoiceForgeProvider {
     };
 
     getOmniVoiceAsrModel() {
-        const moduleSettings = extension_settings?.voiceforge_call_mode || {};
+        const moduleSettings = extension_settings?.callmode || {};
         const model = String(moduleSettings.asr_model || '').trim();
         if (!model || model === 'large-v3-turbo' || model === 'whisper-large-v3-turbo') {
             return 'large-v3-turbo';
@@ -196,17 +196,22 @@ class VoiceForgeProvider {
         console.debug('VoiceForge: UI updated - chunk:', chunkSize, 'seed:', seed);
     }
 
+    saveTtsProviderSettings() {
+        extension_settings.tts['VoiceForge'] = this.settings;
+        saveSettingsDebounced();
+    }
+
     setupEventHandlers() {
         // Endpoint change
         $('#voiceforge_endpoint').off('input').on('input', () => {
             this.settings.provider_endpoint = String($('#voiceforge_endpoint').val()).trim();
-            saveTtsProviderSettings();
+            this.saveTtsProviderSettings();
         });
 
         // Connect button
         $('#voiceforge_connect').off('click').on('click', async () => {
             this.settings.provider_endpoint = String($('#voiceforge_endpoint').val()).trim();
-            saveTtsProviderSettings();
+            this.saveTtsProviderSettings();
             await this.connectToServer();
         });
 
@@ -215,12 +220,12 @@ class VoiceForgeProvider {
             const size = parseInt($('#voiceforge_chunk_size').val());
             this.settings.chunk_size = size;
             $('#voiceforge_chunk_label').text(size);
-            saveTtsProviderSettings();
+            this.saveTtsProviderSettings();
         });
         // Seed
         $('#voiceforge_seed').off('input').on('input', () => {
             this.settings.seed = parseInt($('#voiceforge_seed').val()) || 0;
-            saveTtsProviderSettings();
+            this.saveTtsProviderSettings();
         });
     }
 

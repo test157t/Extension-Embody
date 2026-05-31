@@ -1,12 +1,11 @@
-import { getRequestHeaders } from '../../../../../script.js'
-
 /**
 * Play Mode Loader
 * Discovers, loads, and manages modular play modes
 * Replaces hardcoded mode constants with dynamic loading
- * Built-in mode is loaded from extension folder.
- * Additional modes are discovered from assets/intiface/playmodes.
+* All modes are discovered from the play_modes folder structure
 */
+
+const console = { ...globalThis.console, debug: () => {}, log: () => {}, info: () => {} }
 
 const PlayModeLoader = {
   // Registry of loaded modes (key = folder name)
@@ -21,14 +20,11 @@ const PlayModeLoader = {
   // Mode settings (enabled/disabled)
   settings: {},
 
-  // Mode load errors by mode ID
-  modeErrors: {},
+  // Base path for loading mode files. Resolve from this module so refactors do not break asset URLs.
+  basePath: new URL('.', import.meta.url).toString().replace(/\/$/, ''),
 
-  // Built-in mode path
-  extensionBasePath: '/scripts/extensions/third-party/Extension-Embody/intiface',
-
-  // User mode assets root path
-  assetsModeFolder: 'intiface',
+  // Optional per-mode base paths for user asset playmodes.
+  modeBasePaths: {},
 
   /**
   * Initialize the loader
@@ -66,80 +62,68 @@ const PlayModeLoader = {
   },
 
   /**
-  * Discover available modes by scanning the play_modes directory
+  * Discover available modes by scanning the modes directory
   * Uses a manifest file or directory listing to find mode folders
   * @returns {string[]} Array of mode folder names
   */
   async discoverModes() {
-    const discoveredModes = new Set(['basic']);
+    const discovered = new Set();
 
     try {
-      const response = await fetch('/api/plugins/intiface-assets/list?type=playmodes', {
-        method: 'GET',
-        headers: this.getRequestHeaders(),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const modeIds = Array.isArray(data?.modes) ? data.modes : [];
-        modeIds.forEach((modeId) => {
-          if (modeId && typeof modeId === 'string') {
-            discoveredModes.add(modeId);
-          }
-        });
+      // Try to fetch a modes manifest file first
+      const manifestResponse = await fetch(`${this.basePath}/modes.json`);
+      if (manifestResponse.ok) {
+        const manifest = await manifestResponse.json();
+        for (const modeId of manifest.modes || []) {
+          discovered.add(modeId);
+          this.modeBasePaths[modeId] = `${this.basePath}/${modeId}`;
+        }
       }
     } catch (e) {
-      console.warn('[PlayModeLoader] Could not query intiface-assets plugin for play modes:', e);
+      // Manifest doesn't exist, fall back to scanning
     }
 
-    return [...discoveredModes];
-  },
-
-  getAllowedPatternNamesForMode(modeId) {
-    const names = new Set();
-
-    const basicPatterns = this.patterns.basic || {};
-    Object.keys(basicPatterns).forEach((name) => names.add(String(name).toLowerCase()));
-
-    const modePatterns = this.patterns[modeId] || {};
-    Object.keys(modePatterns).forEach((name) => names.add(String(name).toLowerCase()));
-
-    return names;
-  },
-
-  validateModeData(modeId) {
-    const errors = [];
-    const modeData = this.modes[modeId] || null;
-    const modeSequences = this.sequences[modeId] || {};
-
-    if (!modeData) {
-      errors.push('mode.json failed to load');
-      return errors;
-    }
-
-    const allowedPatternNames = this.getAllowedPatternNamesForMode(modeId);
-
-    for (const [sequenceName, sequenceData] of Object.entries(modeSequences)) {
-      const steps = Array.isArray(sequenceData?.steps) ? sequenceData.steps : null;
-      if (!steps) {
-        errors.push(`sequence '${sequenceName}' is missing a valid steps array`);
-        continue;
+    try {
+      const assetResponse = await fetch('/api/plugins/intiface-assets/list?type=playmodes');
+      if (assetResponse.ok) {
+        const payload = await assetResponse.json();
+        if (payload?.success && Array.isArray(payload.modes)) {
+          for (const modeId of payload.modes) {
+            discovered.add(modeId);
+            this.modeBasePaths[modeId] = `/assets/intiface/playmodes/${encodeURIComponent(modeId)}`;
+          }
+        }
       }
-
-      steps.forEach((step, idx) => {
-        const pattern = String(step?.pattern || '').trim().toLowerCase();
-        if (!pattern) {
-          errors.push(`sequence '${sequenceName}' step ${idx + 1} has no pattern`);
-          return;
-        }
-
-        if (!allowedPatternNames.has(pattern)) {
-          errors.push(`sequence '${sequenceName}' step ${idx + 1} references unknown pattern '${pattern}'`);
-        }
-      });
+    } catch (e) {
+      console.warn('[PlayModeLoader] Could not list asset playmodes', e);
     }
 
-    return errors;
+    if (discovered.size > 0) {
+      return Array.from(discovered);
+    }
+
+    // Fallback: scan directory by attempting to load mode.json from common mode folders
+    // This is done by checking which folders have a valid mode.json
+    const potentialModes = [
+      'basic'
+    ];
+
+    const discoveredModes = [];
+
+    for (const modeId of potentialModes) {
+      try {
+        const response = await fetch(`${this.basePath}/${modeId}/mode.json`);
+        if (response.ok) {
+          discoveredModes.push(modeId);
+          this.modeBasePaths[modeId] = `${this.basePath}/${modeId}`;
+        }
+      } catch (e) {
+        // Mode doesn't exist, skip
+      }
+    }
+
+    // If no modes discovered, return empty array (basic will be handled separately)
+    return discoveredModes;
   },
 
   /**
@@ -148,12 +132,7 @@ const PlayModeLoader = {
   */
   async loadMode(modeId) {
     try {
-      this.modeErrors[modeId] = [];
-
-      const modeBasePath = modeId === 'basic'
-        ? `${this.extensionBasePath}/play_modes/basic`
-        : `/assets/${this.assetsModeFolder}/playmodes/${modeId}`;
-
+      const modeBasePath = this.modeBasePaths[modeId] || `${this.basePath}/${modeId}`;
       // Load mode.json (metadata)
       const modeResponse = await fetch(`${modeBasePath}/mode.json`);
       if (!modeResponse.ok) {
@@ -199,21 +178,6 @@ const PlayModeLoader = {
         }
       } catch (e) {
         // sequences.json is optional
-      }
-
-      const validationErrors = this.validateModeData(modeId);
-      if (validationErrors.length > 0) {
-        this.modeErrors[modeId] = validationErrors;
-        console.error(`[PlayModeLoader] Failed to load mode '${modeId}' due to validation errors:`);
-        validationErrors.forEach((err) => {
-          console.error(` - ${err}`);
-        });
-
-        delete this.modes[modeId];
-        delete this.patterns[modeId];
-        delete this.sequences[modeId];
-        delete this.settings[modeId];
-        return false;
       }
 
       // Initialize settings with defaults from mode.json
@@ -309,18 +273,6 @@ const PlayModeLoader = {
       script.onerror = reject;
       document.head.appendChild(script);
     });
-  },
-
-  getRequestHeaders() {
-    try {
-      if (typeof getRequestHeaders === 'function') {
-        return getRequestHeaders({ omitContentType: true });
-      }
-      if (typeof window !== 'undefined' && typeof window.getRequestHeaders === 'function') {
-        return window.getRequestHeaders({ omitContentType: true });
-      }
-    } catch (_e) {}
-    return {};
   },
 
   /**
@@ -434,13 +386,6 @@ const PlayModeLoader = {
   */
   getEnabledModes() {
     return Object.keys(this.modes).filter(id => this.isModeEnabled(id));
-  },
-
-  /**
-  * Get all mode names (for command parsing)
-  */
-  getModeNames() {
-    return Object.keys(this.modes);
   },
 
   /**
@@ -587,7 +532,8 @@ const PlayModeLoader = {
   generateValues(patternName, steps, min, max) {
     const generator = this.getPattern(patternName);
     if (!generator) {
-      throw new Error(`[PlayModeLoader] Pattern '${patternName}' not found`);
+      console.warn(`[PlayModeLoader] Pattern '${patternName}' not found, using sine fallback`);
+      return this.generateValues('sine', steps, min, max);
     }
 
     const values = [];
@@ -615,16 +561,8 @@ const PlayModeLoader = {
   * Refresh modes - reload custom modes and regenerate UI
   * Call this after adding/editing custom modes
   */
-  async refresh() {
-    // Reload/merge asset-backed modes
-    const discoveredModes = await this.discoverModes();
-    for (const modeId of discoveredModes) {
-      if (!this.modes[modeId] || modeId !== 'basic') {
-        await this.loadMode(modeId);
-      }
-    }
-
-    // Reload custom localStorage modes
+  refresh() {
+    // Reload custom modes
     this.loadCustomModes();
 
     console.log(`[PlayModeLoader] Refreshed: ${Object.keys(this.modes).length} total modes`);
@@ -641,8 +579,7 @@ const PlayModeLoader = {
     const data = {
       modes: [],
       toggleable: [],
-      basic: null,
-      errors: { ...this.modeErrors }
+      basic: null
     };
 
     for (const [modeId, modeData] of Object.entries(this.modes)) {

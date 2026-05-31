@@ -1,10 +1,10 @@
-/**
+﻿/**
  * Idle Animation System
  * Generates procedural AnimationClips for natural idle movements
  * These integrate with the AnimationMixer for proper fade in/out support
  */
 
-import * as THREE from './lib/three.module.js';
+import * as THREE from '../lib/three.module.js';
 import { DEBUG_PREFIX } from './constants.js';
 
 /**

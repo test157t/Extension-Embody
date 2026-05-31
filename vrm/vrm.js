@@ -1,11 +1,11 @@
-import * as THREE from './lib/three.module.js';
-import { GLTFLoader } from './lib/jsm/loaders/GLTFLoader.js';
-import { FBXLoader } from './lib/jsm/loaders/FBXLoader.js';
-import { OrbitControls } from './lib/jsm/controls/OrbitControls.js';
-import { VRMALoader } from './lib/jsm/loaders/VRMALoader.js';
-import { VRMLoaderPlugin, VRMUtils, VRMSpringBoneCollider, VRMSpringBoneColliderShapeSphere } from './lib/three-vrm.module.js';
+﻿import * as THREE from '../lib/three.module.js';
+import { GLTFLoader } from '../lib/jsm/loaders/GLTFLoader.js';
+import { FBXLoader } from '../lib/jsm/loaders/FBXLoader.js';
+import { OrbitControls } from '../lib/jsm/controls/OrbitControls.js';
+import { VRMALoader } from '../lib/jsm/loaders/VRMALoader.js';
+import { VRMLoaderPlugin, VRMUtils, VRMSpringBoneCollider, VRMSpringBoneColliderShapeSphere } from '../lib/three-vrm.module.js';
 import { loadBVHAnimation, loadMixamoAnimation, loadMMDAnimation } from './animationLoader.js';
-import { MMDLoader } from './lib/jsm/loaders/MMDLoader.js';
+import { MMDLoader } from '../lib/jsm/loaders/MMDLoader.js';
 
 import { getRequestHeaders, saveSettings, saveSettingsDebounced, sendMessageAsUser } from '../../../../../script.js';
 import { getContext, extension_settings, getApiUrl, doExtrasFetch, modules } from '../../../../extensions.js';
@@ -74,7 +74,7 @@ export {
 const VRM_CONTAINER_NAME = "VRM_CONTAINER";
 const VRM_COLLIDER_NAME = "VRM_COLLIDER"
 const VRM_PHONE_PROP_NAME = "VRM_PHONE_PROP";
-const PHONE_PROP_FBX_PATH = '/scripts/extensions/third-party/Extension-Embody/vrm/phone.fbx';
+const PHONE_PROP_FBX_PATH = '/scripts/extensions/third-party/Extension-Embody/vrm/objects/phone.fbx';
 const PHONE_PROP_TARGET_MAX_DIM = 0.16;
 const PHONE_RIGHT_LOCAL_ROTATION = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.98, 1.58, 0.22));
 const PHONE_RIGHT_LOCAL_OFFSET = new THREE.Vector3(0.048, 0.018, 0.014);
@@ -3945,7 +3945,7 @@ async function setMotion(character, motion_file_path, loop=false, force=false, r
         current_avatars[character]["animation_mixer"] = mixer;
         console.debug(DEBUG_PREFIX,"Created new AnimationMixer for",character);
     } else {
-        // Some builds of three keep the root on _root; if it’s missing, recreate safely.
+        // Some builds of three keep the root on _root; if itâ€™s missing, recreate safely.
         // This is a pragmatic guard against mixer being created with an undefined root.
         if (!mixer._root) {
             mixer = new THREE.AnimationMixer(vrm.scene);
@@ -3994,6 +3994,7 @@ async function setMotion(character, motion_file_path, loop=false, force=false, r
 
   // new animation
   if (current_motion_name != motion_file_path || loop || force) {
+    clearManagedCharacterTimer(character, 'postMotionRestore');
     const targetIsIdleMotion = isIdleMotionName(motion_file_path, defaultMotion);
 
     if (!targetIsIdleMotion) {
@@ -4065,16 +4066,20 @@ async function setMotion(character, motion_file_path, loop=false, force=false, r
 
     // Fade out animation after full loop
     if (!loop) {
-      setTimeout(() => {
-        if (!new_motion_animation.terminated) {
+      const restoreDelayMs = Math.max(0, (clip.duration * 1000) - (ANIMATION_FADE_TIME * 1000));
+      setManagedCharacterTimer(character, 'postMotionRestore', restoreDelayMs, () => {
+        const currentAction = current_avatars[character]?.motion?.animation;
+        if (currentAction === new_motion_animation && !new_motion_animation.terminated) {
+          new_motion_animation.terminated = true;
           const postMotionIdleDelayMs = 1200;
           suspendNaturalIdle(character, postMotionIdleDelayMs);
-          setMotion(character, extension_settings.vrm.model_settings[model_path]["animation_default"]["motion"], true);
+          const restoreMotion = extension_settings.vrm.model_settings?.[model_path]?.["animation_default"]?.["motion"] || "none";
+          setMotion(character, restoreMotion, true, true, false);
           if (options.restoreExpression) {
             restoreExpressionState(character, options.restoreExpression);
           }
         }
-      }, clip.duration*1000 - ANIMATION_FADE_TIME*1000);
+      });
     }
 
     }
@@ -4191,7 +4196,10 @@ function triggerLoadGreetingMotion(character, model_path, expectedModelId) {
         return;
     }
 
-    setTimeout(() => {
+    clearManagedCharacterTimer(character, 'greetingStart');
+    clearManagedCharacterTimer(character, 'greetingWatchdog');
+
+    setManagedCharacterTimer(character, 'greetingStart', 250, () => {
         if (!current_avatars[character] || current_avatars[character]["id"] !== expectedModelId) {
             return;
         }
@@ -4201,10 +4209,27 @@ function triggerLoadGreetingMotion(character, model_path, expectedModelId) {
             clearOnComplete: true,
             restoreBaseIdle: true,
             priority: 'high',
+            replace: true,
         }).catch((error) => {
             console.warn(DEBUG_PREFIX, 'Failed to play load greeting motion for', character, greetingMotion, error);
         });
-    }, 250);
+
+        setManagedCharacterTimer(character, 'greetingWatchdog', 12000, async () => {
+            if (!current_avatars[character] || current_avatars[character]["id"] !== expectedModelId) {
+                return;
+            }
+            const queueState = sequencePlaybackState[character];
+            if (queueState?.active || queueState?.waiting || animationSequences[character]) {
+                clearAnimationSequence(character);
+                const defaultMotion = extension_settings.vrm.model_settings?.[model_path]?.animation_default?.motion || 'none';
+                try {
+                    await setMotion(character, defaultMotion, true, true, false);
+                } catch (e) {
+                    console.warn(DEBUG_PREFIX, 'Greeting watchdog failed to restore idle for', character, e);
+                }
+            }
+        });
+    });
 }
 
 function ensureAnimationFileExtension(animationPath) {
@@ -4885,7 +4910,7 @@ async function scanVRMAIdleFiles() {
   ];
 
   // Build full paths for the bundled VRM assets inside Embody.
-  const basePath = '/scripts/extensions/third-party/Extension-Embody/vrm/';
+  const basePath = '/scripts/extensions/third-party/Extension-Embody/vrm/idles/';
 
   for (const file of possibleFiles) {
     vrmaIdleFiles.push(`${basePath}${file}`);

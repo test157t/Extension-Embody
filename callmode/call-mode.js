@@ -20,8 +20,8 @@ import { extension_settings, getContext } from '../../../../extensions.js';
 
 const console = { ...globalThis.console, debug: () => {} };
 
-const DEBUG_PREFIX = '<VoiceForge Call Mode> ';
-const MODULE_NAME = 'voiceforge_call_mode';
+const DEBUG_PREFIX = '<CallMode> ';
+const MODULE_NAME = 'callmode';
 const WEATHER_FETCH_TIMEOUT_MS = 9000;
 const WEATHER_REFRESH_MIN_MINUTES = 5;
 const WEATHER_REFRESH_MAX_MINUTES = 180;
@@ -175,23 +175,21 @@ let callSfxContext = null;
 let lastCallSfxAt = 0;
 const CALL_SFX_MIN_INTERVAL_MS = 90;
 const CALL_SFX_CANDIDATES = {
-    start: ['snap_reverb.mp3'],
-    end: ['snap_reverb.mp3'],
+    start: ['sounds/snap_reverb.mp3'],
+    end: ['sounds/snap_reverb.mp3'],
 };
-const CALL_AMBIENT_CANDIDATES = ['callmode_static.mp3'];
-const CALL_AMBIENT_VOLUME = 0.05;
+
+const CALL_AMBIENT_CANDIDATES = ['sounds/callmode_static.mp3'];
+
 const CALL_PARTICLE_AMBIENT_CANDIDATES = {
-    snow: ['snow.mp3', 'snow_ambient.mp3'],
-    rain: ['rain.mp3', 'storm_light.mp3'],
-    firefly: ['fireflies.mp3', 'forest_night.mp3'],
+    snow: ['sounds/snow.mp3', 'sounds/snow_ambient.mp3'],
+    rain: ['sounds/rain.mp3', 'sounds/storm_light.mp3'],
+    firefly: ['sounds/fireflies.mp3', 'sounds/forest_night.mp3'],
 };
-const CALL_PARTICLE_AMBIENT_VOLUME = 0.03;
-const CALL_PARTICLE_AMBIENT_STYLE_GAIN = {
-    firefly: 0.12,
-};
+
 const CALL_BREATH_CUE_CANDIDATES = {
-    in: ['breathe_in.wav'],
-    out: ['breathe_out.wav'],
+    in: ['sounds/breathe_in.wav'],
+    out: ['sounds/breathe_out.wav'],
 };
 const CALL_BREATH_CUE_VOLUME = 0.01;
 const CALL_BREATH_CUE_PERIOD_MS = 9600;
@@ -364,7 +362,7 @@ function isDocumentHidden() {
 }
 
 function isSettingsUiOpen() {
-    const host = document.querySelector('#tts_settings .inline-drawer-content');
+    const host = document.querySelector('#embody-callmode-panel');
     if (!host) {
         return false;
     }
@@ -568,7 +566,7 @@ async function resolveIncomingCallAudioUrl() {
     }
 
     incomingCallAudioResolvePromise = (async () => {
-        const url = new URL('Incoming_Call.mp3', import.meta.url).href;
+        const url = new URL('sounds/Incoming_Call.mp3', import.meta.url).href;
         try {
             const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
             if (response.ok) {
@@ -595,7 +593,7 @@ async function resolveOutgoingCallAudioUrl() {
     }
 
     outgoingCallAudioResolvePromise = (async () => {
-        const url = new URL('Outgoing_Call.mp3', import.meta.url).href;
+        const url = new URL('sounds/Outgoing_Call.mp3', import.meta.url).href;
         try {
             const response = await fetch(url, { method: 'HEAD', cache: 'no-store' });
             if (response.ok) {
@@ -618,7 +616,7 @@ async function resolveMuteSoundAudioUrl() {
         return muteSoundAudioUrl;
     }
 
-    muteSoundAudioUrl = new URL('Mute.mp3', import.meta.url).href;
+    muteSoundAudioUrl = new URL('sounds/Mute.mp3', import.meta.url).href;
     return muteSoundAudioUrl;
 }
 
@@ -627,12 +625,12 @@ async function resolveUnmuteSoundAudioUrl() {
         return unmuteSoundAudioUrl;
     }
 
-    unmuteSoundAudioUrl = new URL('Unmute.mp3', import.meta.url).href;
+    unmuteSoundAudioUrl = new URL('sounds/Unmute.mp3', import.meta.url).href;
     return unmuteSoundAudioUrl;
 }
 
 function ensureMuteSoundPlayer() {
-    const url = muteSoundAudioUrl || new URL('Mute.mp3', import.meta.url).href;
+    const url = muteSoundAudioUrl || new URL('sounds/Mute.mp3', import.meta.url).href;
     muteSoundAudioUrl = url;
     if (!muteSoundPlayer) {
         muteSoundPlayer = new Audio(url);
@@ -648,7 +646,7 @@ function ensureMuteSoundPlayer() {
 }
 
 function ensureUnmuteSoundPlayer() {
-    const url = unmuteSoundAudioUrl || new URL('Unmute.mp3', import.meta.url).href;
+    const url = unmuteSoundAudioUrl || new URL('sounds/Unmute.mp3', import.meta.url).href;
     unmuteSoundAudioUrl = url;
     if (!unmuteSoundPlayer) {
         unmuteSoundPlayer = new Audio(url);
@@ -6491,7 +6489,7 @@ export function initCallMode() {
     
     // Add settings UI
     const settingsHtml = getCallModeSettingsHtml();
-    $('#tts_settings .inline-drawer-content').append('<hr>' + settingsHtml);
+    $('#embody-callmode-panel').append('<hr>' + settingsHtml);
     
     const initSectionToggle = (headerSelector, contentSelector, iconSelector, settingKey, openByDefault) => {
         const header = $(headerSelector);
@@ -6562,6 +6560,14 @@ export function initCallMode() {
         saveSettingsDebounced();
     });
 
+    $('#voiceforge_call_mute_releases_mic').prop('checked', extension_settings[MODULE_NAME]?.muteReleasesMic === true);
+    $(document)
+        .off('change.callmodeMuteReleasesMic', '#voiceforge_call_mute_releases_mic')
+        .on('change.callmodeMuteReleasesMic', '#voiceforge_call_mute_releases_mic', function() {
+            extension_settings[MODULE_NAME].muteReleasesMic = $(this).is(':checked');
+            saveSettingsDebounced();
+        });
+
     $('#voiceforge_call_move_qr_to_send_area').prop('checked', extension_settings[MODULE_NAME]?.moveQuickRepliesToSendArea === true);
     $('#voiceforge_call_move_qr_to_send_area').on('change', function() {
         extension_settings[MODULE_NAME].moveQuickRepliesToSendArea = $(this).is(':checked');
@@ -6597,30 +6603,53 @@ export function initCallMode() {
         scheduleRandomCall();
     });
 
-    $('#voiceforge_generation_weather_context_enabled').prop('checked', extension_settings[MODULE_NAME]?.weatherContextEnabled === true);
-    $('#voiceforge_generation_weather_context_enabled').on('change', function() {
-        extension_settings[MODULE_NAME].weatherContextEnabled = $(this).is(':checked');
-        applyWeatherContextLifecycle({ forceFetch: true });
-        saveSettingsDebounced();
-    });
+    const syncWeatherUiFromSettings = () => {
+        const weatherToggle = $('#voiceforge_generation_weather_context_enabled');
+        if (weatherToggle.length) {
+            weatherToggle.prop('checked', extension_settings[MODULE_NAME]?.weatherContextEnabled === true);
+        }
 
-    $('#voiceforge_generation_weather_refresh_minutes').val(getNormalizedWeatherRefreshMinutes());
-    $('#voiceforge_generation_weather_refresh_minutes').on('change', function() {
-        const value = Math.max(WEATHER_REFRESH_MIN_MINUTES, Math.min(WEATHER_REFRESH_MAX_MINUTES, Number($(this).val()) || defaultSettings.weatherRefreshMinutes));
-        extension_settings[MODULE_NAME].weatherRefreshMinutes = value;
-        $(this).val(value);
-        applyWeatherContextLifecycle({ forceFetch: true });
-        saveSettingsDebounced();
-    });
+        const weatherRefresh = $('#voiceforge_generation_weather_refresh_minutes');
+        if (weatherRefresh.length) {
+            weatherRefresh.val(getNormalizedWeatherRefreshMinutes());
+        }
 
-    $('#voiceforge_generation_weather_manual_city').val(extension_settings[MODULE_NAME]?.weatherManualCity || '');
-    $('#voiceforge_generation_weather_manual_city').on('change', function() {
-        const city = String($(this).val() || '').trim();
-        extension_settings[MODULE_NAME].weatherManualCity = city;
-        $(this).val(city);
-        applyWeatherContextLifecycle({ forceFetch: true });
-        saveSettingsDebounced();
-    });
+        const weatherCity = $('#voiceforge_generation_weather_manual_city');
+        if (weatherCity.length) {
+            weatherCity.val(extension_settings[MODULE_NAME]?.weatherManualCity || '');
+        }
+    };
+
+    syncWeatherUiFromSettings();
+    $(document).on('embody-environment-mounted', syncWeatherUiFromSettings);
+
+    $(document)
+        .off('change.callmodeWeatherToggle', '#voiceforge_generation_weather_context_enabled')
+        .on('change.callmodeWeatherToggle', '#voiceforge_generation_weather_context_enabled', function() {
+            extension_settings[MODULE_NAME].weatherContextEnabled = $(this).is(':checked');
+            applyWeatherContextLifecycle({ forceFetch: true });
+            saveSettingsDebounced();
+        });
+
+    $(document)
+        .off('change.callmodeWeatherRefresh', '#voiceforge_generation_weather_refresh_minutes')
+        .on('change.callmodeWeatherRefresh', '#voiceforge_generation_weather_refresh_minutes', function() {
+            const value = Math.max(WEATHER_REFRESH_MIN_MINUTES, Math.min(WEATHER_REFRESH_MAX_MINUTES, Number($(this).val()) || defaultSettings.weatherRefreshMinutes));
+            extension_settings[MODULE_NAME].weatherRefreshMinutes = value;
+            $(this).val(value);
+            applyWeatherContextLifecycle({ forceFetch: true });
+            saveSettingsDebounced();
+        });
+
+    $(document)
+        .off('change.callmodeWeatherCity', '#voiceforge_generation_weather_manual_city')
+        .on('change.callmodeWeatherCity', '#voiceforge_generation_weather_manual_city', function() {
+            const city = String($(this).val() || '').trim();
+            extension_settings[MODULE_NAME].weatherManualCity = city;
+            $(this).val(city);
+            applyWeatherContextLifecycle({ forceFetch: true });
+            saveSettingsDebounced();
+        });
 
     applyQuickRepliesPlacementForCallMode();
 
@@ -7077,8 +7106,8 @@ export function initCallMode() {
         markOverlayInteraction();
     };
 
-    const settingsRoot = $('#tts_settings');
-    const settingsScrollHost = $('#tts_settings .inline-drawer-content');
+    const settingsRoot = $('#embody-callmode-panel');
+    const settingsScrollHost = $('#embody-callmode-panel');
     settingsRoot.off('pointerdown.voiceforge-overlay');
     settingsRoot.on('pointerdown.voiceforge-overlay', markOverlayInteraction);
     settingsScrollHost.off('scroll.voiceforge-overlay wheel.voiceforge-overlay touchmove.voiceforge-overlay');

@@ -1,7 +1,7 @@
-import * as THREE from './lib/three.module.js';
-import { FBXLoader } from './lib/jsm/loaders/FBXLoader.js';
-import { BVHLoader } from './lib/jsm/loaders/BVHLoader.js';
-import { MMDLoader } from './lib/jsm/loaders/MMDLoader.js';
+﻿import * as THREE from '../lib/three.module.js';
+import { FBXLoader } from '../lib/jsm/loaders/FBXLoader.js';
+import { BVHLoader } from '../lib/jsm/loaders/BVHLoader.js';
+import { MMDLoader } from '../lib/jsm/loaders/MMDLoader.js';
 
 import {
     DEBUG_PREFIX
@@ -80,67 +80,67 @@ const mixamoVRMRigMap = {
  */
 const mmdVRMRigMap = {
 	// Core body
-	'センター': 'hips',
+	'ã‚»ãƒ³ã‚¿ãƒ¼': 'hips',
 	'center': 'hips',
-	'グルーブ': 'hips',
+	'ã‚°ãƒ«ãƒ¼ãƒ–': 'hips',
 	'groove': 'hips',
 
-	'下半身': 'hips',
+	'ä¸‹åŠèº«': 'hips',
 	'lower body': 'hips',
 
-	'上半身': 'spine',
+	'ä¸ŠåŠèº«': 'spine',
 	'upper body': 'spine',
-	'上半身2': 'chest',
+	'ä¸ŠåŠèº«2': 'chest',
 	'upper body2': 'chest',
-	'上半身3': 'upperChest',
+	'ä¸ŠåŠèº«3': 'upperChest',
 	'upper body3': 'upperChest',
 
-	'首': 'neck',
+	'é¦–': 'neck',
 	'neck': 'neck',
-	'頭': 'head',
+	'é ­': 'head',
 	'head': 'head',
 
 	// Shoulders / arms
-	'左肩': 'leftShoulder',
-	'左肩P': 'leftShoulder',
+	'å·¦è‚©': 'leftShoulder',
+	'å·¦è‚©P': 'leftShoulder',
 	'left shoulder': 'leftShoulder',
-	'右肩': 'rightShoulder',
-	'右肩P': 'rightShoulder',
+	'å³è‚©': 'rightShoulder',
+	'å³è‚©P': 'rightShoulder',
 	'right shoulder': 'rightShoulder',
 
-	'左腕': 'leftUpperArm',
+	'å·¦è…•': 'leftUpperArm',
 	'left arm': 'leftUpperArm',
-	'左ひじ': 'leftLowerArm',
+	'å·¦ã²ã˜': 'leftLowerArm',
 	'left elbow': 'leftLowerArm',
-	'左手首': 'leftHand',
+	'å·¦æ‰‹é¦–': 'leftHand',
 	'left wrist': 'leftHand',
 
-	'右腕': 'rightUpperArm',
+	'å³è…•': 'rightUpperArm',
 	'right arm': 'rightUpperArm',
-	'右ひじ': 'rightLowerArm',
+	'å³ã²ã˜': 'rightLowerArm',
 	'right elbow': 'rightLowerArm',
-	'右手首': 'rightHand',
+	'å³æ‰‹é¦–': 'rightHand',
 	'right wrist': 'rightHand',
 
 	// Legs
-	'左足': 'leftUpperLeg',
+	'å·¦è¶³': 'leftUpperLeg',
 	'left leg': 'leftUpperLeg',
-	'左ひざ': 'leftLowerLeg',
+	'å·¦ã²ã–': 'leftLowerLeg',
 	'left knee': 'leftLowerLeg',
-	'左足首': 'leftFoot',
+	'å·¦è¶³é¦–': 'leftFoot',
 	'left ankle': 'leftFoot',
 
-	'右足': 'rightUpperLeg',
+	'å³è¶³': 'rightUpperLeg',
 	'right leg': 'rightUpperLeg',
-	'右ひざ': 'rightLowerLeg',
+	'å³ã²ã–': 'rightLowerLeg',
 	'right knee': 'rightLowerLeg',
-	'右足首': 'rightFoot',
+	'å³è¶³é¦–': 'rightFoot',
 	'right ankle': 'rightFoot',
 
 	// Toes (often not present / named differently in MMD; add as needed)
-	'左つま先': 'leftToes',
+	'å·¦ã¤ã¾å…ˆ': 'leftToes',
 	'left toe': 'leftToes',
-	'右つま先': 'rightToes',
+	'å³ã¤ã¾å…ˆ': 'rightToes',
 	'right toe': 'rightToes',
 };
 
