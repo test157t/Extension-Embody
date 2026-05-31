@@ -46,6 +46,7 @@ let mediaLibraryState = {
   typeFilter: 'all',
   sortBy: 'name-asc',
   durationProbePromises: new Map(),
+  durationLoadId: 0,
 }
 
 let funscriptEditorState = {
@@ -483,6 +484,17 @@ function formatDuration(durationMs) {
   return `${minutes}:${String(seconds).padStart(2, '0')}`
 }
 
+function formatMediaDate(timestampMs) {
+  const timestamp = Number(timestampMs)
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return 'Unknown date'
+
+  return new Date(timestamp).toLocaleDateString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
+}
+
 function sortMediaFiles(files) {
   const sorted = [...files]
   const sortBy = mediaLibraryState.sortBy
@@ -637,6 +649,7 @@ function renderMenuMediaList() {
   mediaFiles.forEach(file => {
     const sizeMB = ((file.size || 0) / 1024 / 1024).toFixed(1)
     const durationText = formatDuration(getDurationMs(file))
+    const dateText = formatMediaDate(file.lastModifiedMs)
     const iconClass = file.type === 'audio' ? 'fa-music' : (file.type === 'video' ? 'fa-film' : 'fa-file-video')
     const iconColor = file.type === 'audio' ? '#9C27B0' : (file.type === 'video' ? '#64B5F6' : '#90A4AE')
 
@@ -648,7 +661,7 @@ function renderMenuMediaList() {
           <i class="fa-solid ${iconClass}" style="color: ${iconColor};"></i>
           <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${file.name}</span>
         </div>
-        <span style="font-size: 0.75em; color: #888; white-space: nowrap; margin-left: 8px;">${sizeMB} MB | ${durationText}</span>
+        <span style="font-size: 0.75em; color: #888; white-space: nowrap; margin-left: 8px;">${sizeMB} MB | ${durationText} | ${dateText}</span>
       </div>
     `
   })
@@ -1933,6 +1946,7 @@ async function saveEditedFunscript() {
 async function refreshMenuMediaList() {
   const mediaListEl = $("#intiface-menu-media-list")
   mediaListEl.html('<div style="color: #888; text-align: center; padding: 20px;"><i class="fa-solid fa-spinner fa-spin"></i> Loading...</div>')
+  const durationLoadId = ++mediaLibraryState.durationLoadId
 
   try {
     let mediaPaths = (await getIntifaceAssetList('media'))
@@ -1973,6 +1987,14 @@ async function refreshMenuMediaList() {
     }
 
     renderMenuMediaList()
+
+    if (mediaLibraryState.sortBy !== 'duration-desc' && mediaLibraryState.sortBy !== 'duration-asc') {
+      ensureMediaDurationsLoaded().then(() => {
+        if (mediaLibraryState.durationLoadId === durationLoadId) {
+          renderMenuMediaList()
+        }
+      }).catch(() => {})
+    }
 
   } catch (error) {
     console.error(`${d("NAME") || "Intiface"}: Failed to refresh menu media:`, error)

@@ -11,7 +11,9 @@ import {
     HITBOXES,
     DEFAULT_LIGHT_COLOR,
     DEFAULT_LIGHT_INTENSITY,
-    DEFAULT_CUSTOM_EXPRESSIONS
+    DEFAULT_CUSTOM_EXPRESSIONS,
+    DEFAULT_EXPRESSION_MAPPING,
+    DEFAULT_MOTION_MAPPING
 } from './constants.js';
 
 import {
@@ -89,6 +91,68 @@ let models_files_label = [];
 
 let animations_files = [];
 let animations_groups = [];
+
+function getDefaultAnimationMapping(type) {
+    return {
+        expression: DEFAULT_EXPRESSION_MAPPING[type] || 'none',
+        motion: DEFAULT_MOTION_MAPPING[type] || 'none',
+        sequence: '',
+    };
+}
+
+function isBlankAnimationMapping(mapping) {
+    if (!mapping) return true;
+    return (!mapping.expression || mapping.expression === 'none')
+        && (!mapping.motion || mapping.motion === 'none')
+        && !String(mapping.sequence || '').trim();
+}
+
+function restoreBlankDefaultMappings(settings) {
+    if (!settings) return false;
+    let changed = false;
+
+    if (isBlankAnimationMapping(settings.animation_default)) {
+        settings.animation_default = getDefaultAnimationMapping('default');
+        changed = true;
+    }
+
+    settings.classify_mapping ??= {};
+    settings.hitboxes_mapping ??= {};
+
+    for (const expression of CLASSIFY_EXPRESSIONS) {
+        if (isBlankAnimationMapping(settings.classify_mapping[expression])) {
+            settings.classify_mapping[expression] = getDefaultAnimationMapping(expression);
+            changed = true;
+        }
+    }
+
+    for (const area in HITBOXES) {
+        if (isBlankAnimationMapping(settings.hitboxes_mapping[area])) {
+            settings.hitboxes_mapping[area] = { ...getDefaultAnimationMapping(area), message: settings.hitboxes_mapping?.[area]?.message || '' };
+            changed = true;
+        }
+    }
+
+    return changed;
+}
+
+function resetClassifyMappingsToDefaults(modelPath) {
+    const settings = extension_settings.vrm.model_settings?.[modelPath];
+    if (!settings) return;
+    settings.classify_mapping ??= {};
+    for (const expression of CLASSIFY_EXPRESSIONS) {
+        settings.classify_mapping[expression] = getDefaultAnimationMapping(expression);
+    }
+}
+
+function resetHitboxMappingsToDefaults(modelPath) {
+    const settings = extension_settings.vrm.model_settings?.[modelPath];
+    if (!settings) return;
+    settings.hitboxes_mapping ??= {};
+    for (const area in HITBOXES) {
+        settings.hitboxes_mapping[area] = { ...getDefaultAnimationMapping(area), message: settings.hitboxes_mapping?.[area]?.message || '' };
+    }
+}
 
 function onlyUnique(value, index, array) {
     return array.indexOf(value) === index;
@@ -415,7 +479,7 @@ async function onModelChange() {
             'rx': 0.0,
             'ry': 0.0,
             'rz':0.0,
-            'animation_default': { 'expression': 'none', 'motion': 'none' },
+            'animation_default': getDefaultAnimationMapping('default'),
             //'animation_click': { 'expression': 'none', 'motion': 'none', 'message': '' },
             'classify_mapping': {},
             'hitboxes_mapping': {},
@@ -423,11 +487,11 @@ async function onModelChange() {
         };
 
         for (const expression of CLASSIFY_EXPRESSIONS) {
-            extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression] = { 'expression': 'none', 'motion': 'none', 'sequence': '' };
+            extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression] = getDefaultAnimationMapping(expression);
         }
 
         for (const area in HITBOXES) {
-            extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][area] = { 'expression': 'none', 'motion': 'none', 'sequence': '', 'message': '' };
+            extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][area] = { ...getDefaultAnimationMapping(area), 'message': '' };
         }
 
         // Initialize default custom expressions
@@ -531,7 +595,7 @@ function ensureModelSettings(model_path) {
             'rx': 0.0,
             'ry': 0.0,
             'rz': 0.0,
-            'animation_default': { 'expression': 'none', 'motion': 'none' },
+            'animation_default': getDefaultAnimationMapping('default'),
             'classify_mapping': {},
             'hitboxes_mapping': {},
             'blend_shape_mapping': {}
@@ -539,18 +603,22 @@ function ensureModelSettings(model_path) {
     }
 
     const settings = extension_settings.vrm.model_settings[model_path];
-    settings.animation_default ??= { 'expression': 'none', 'motion': 'none' };
+    settings.animation_default ??= getDefaultAnimationMapping('default');
     settings.classify_mapping ??= {};
     settings.hitboxes_mapping ??= {};
     settings.blend_shape_mapping ??= {};
 
+    if (restoreBlankDefaultMappings(settings)) {
+        saveSettingsDebounced();
+    }
+
     for (const expression of CLASSIFY_EXPRESSIONS) {
-        settings.classify_mapping[expression] ??= { 'expression': 'none', 'motion': 'none', 'sequence': '' };
+        settings.classify_mapping[expression] ??= getDefaultAnimationMapping(expression);
         settings.classify_mapping[expression].sequence ??= '';
     }
 
     for (const area in HITBOXES) {
-        settings.hitboxes_mapping[area] ??= { 'expression': 'none', 'motion': 'none', 'sequence': '', 'message': '' };
+        settings.hitboxes_mapping[area] ??= { ...getDefaultAnimationMapping(area), 'message': '' };
         settings.hitboxes_mapping[area].sequence ??= '';
         settings.hitboxes_mapping[area].message ??= '';
     }
@@ -565,6 +633,22 @@ async function loadModelUi(use_default_settings) {
     expression_ui.empty();
     hiboxes_ui.empty();
 
+    hiboxes_ui.append(`
+        <div class="vrm-map-tools" style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+            <button type="button" id="vrm_hitboxes_reset_defaults" class="menu_button">
+                <i class="fa-solid fa-arrow-rotate-left"></i> Reset Hit Area Defaults
+            </button>
+        </div>
+    `);
+
+    expression_ui.append(`
+        <div class="vrm-map-tools" style="display: flex; justify-content: flex-end; margin-bottom: 8px;">
+            <button type="button" id="vrm_classify_reset_defaults" class="menu_button">
+                <i class="fa-solid fa-arrow-rotate-left"></i> Reset Expression Defaults
+            </button>
+        </div>
+    `);
+
     if (model_path == "none")
         return;
 
@@ -578,6 +662,18 @@ async function loadModelUi(use_default_settings) {
     }
 
     console.debug(DEBUG_PREFIX, 'loading settings of model:', model_path);
+
+    $('#vrm_hitboxes_reset_defaults').off('click').on('click', async () => {
+        resetHitboxMappingsToDefaults(model_path);
+        saveSettingsDebounced();
+        await loadModelUi(false);
+    });
+
+    $('#vrm_classify_reset_defaults').off('click').on('click', async () => {
+        resetClassifyMappingsToDefaults(model_path);
+        saveSettingsDebounced();
+        await loadModelUi(false);
+    });
 
     let model_expressions = [];
     let model_motions = animations_groups;
@@ -666,10 +762,6 @@ async function loadModelUi(use_default_settings) {
                         <i class="fa-solid fa-arrow-rotate-left"></i>
                     </div>
                 </div>
-                <input type="text" id="vrm_hitbox_sequence_${hitbox}" 
-                    placeholder="Sequence: wave,point,wait:500,idle" 
-                    style="width: 100%; background-color: #000; color: #fff; border: 1px solid #555; padding: 3px; font-size: 0.9em; margin-bottom: 3px;"
-                    title="Optional: Define a sequence of animations instead of a single motion. Format: animation1,animation2,wait:ms,animation3">
                 <textarea id="vrm_hitbox_message_${hitbox}" type="text" class="text_pole textarea_compact" rows="2"
             placeholder="Write message te send when clicking the area."></textarea>
             </div>
@@ -686,26 +778,23 @@ async function loadModelUi(use_default_settings) {
             extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['expression'],
             extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['motion']);
 
-        // Set sequence and message values
-        const sequenceValue = extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['sequence'] || '';
-        $(`#vrm_hitbox_sequence_${hitbox}`).val(sequenceValue);
+        // Set message value. Existing saved sequence values are preserved but not shown in this compact map UI.
         $(`#vrm_hitbox_message_${hitbox}`).val(extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['message']);
 
         $(`#vrm_hitbox_expression_select_${hitbox}`).on('change', function () { updateHitboxMapping(hitbox); });
         $(`#vrm_hitbox_motion_select_${hitbox}`).on('change', function () { updateHitboxMapping(hitbox); });
-        $(`#vrm_hitbox_sequence_${hitbox}`).on('change', function () { updateHitboxMapping(hitbox); });
         $(`#vrm_hitbox_message_${hitbox}`).on('change', function () { updateHitboxMapping(hitbox); });
         $(`#vrm_hitbox_expression_replay_${hitbox}`).on('click', function () { updateHitboxMapping(hitbox); });
         $(`#vrm_hitbox_motion_replay_${hitbox}`).on('click', function () { updateHitboxMapping(hitbox); });
 
         
         // Default loaded
-        if (extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['expression'] != $(`#vrm_hitbox_expression_select_${hitbox}`).val()) {
+        if (use_default_settings && extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['expression'] != $(`#vrm_hitbox_expression_select_${hitbox}`).val()) {
             extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['expression'] = $(`#vrm_hitbox_expression_select_${hitbox}`).val();
             saveSettingsDebounced();
         }
         
-        if (extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['motion'] != $(`#vrm_hitbox_motion_select_${hitbox}`).val()) {
+        if (use_default_settings && extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['motion'] != $(`#vrm_hitbox_motion_select_${hitbox}`).val()) {
             extension_settings.vrm.model_settings[model_path]['hitboxes_mapping'][hitbox]['motion'] = $(`#vrm_hitbox_motion_select_${hitbox}`).val();
             saveSettingsDebounced();
         }
@@ -724,12 +813,12 @@ async function loadModelUi(use_default_settings) {
         extension_settings.vrm.model_settings[model_path]['animation_default']['motion']);
 
     // Default loaded
-    if (extension_settings.vrm.model_settings[model_path]['animation_default']['expression'] != $(`#vrm_default_expression_select`).val()) {
+    if (use_default_settings && extension_settings.vrm.model_settings[model_path]['animation_default']['expression'] != $(`#vrm_default_expression_select`).val()) {
         extension_settings.vrm.model_settings[model_path]['animation_default']['expression'] = $(`#vrm_default_expression_select`).val();
         saveSettingsDebounced();
     }
     
-    if (extension_settings.vrm.model_settings[model_path]['animation_default']['motion'] != $(`#vrm_default_motion_select`).val()) {
+    if (use_default_settings && extension_settings.vrm.model_settings[model_path]['animation_default']['motion'] != $(`#vrm_default_motion_select`).val()) {
         extension_settings.vrm.model_settings[model_path]['animation_default']['motion'] = $(`#vrm_default_motion_select`).val();
         saveSettingsDebounced();
     }
@@ -758,12 +847,6 @@ async function loadModelUi(use_default_settings) {
                         <i class="fa-solid fa-arrow-rotate-left"></i>
                     </div>
                 </div>
-                <div class="vrm-sequence-input-div">
-                    <input type="text" id="vrm_sequence_input_${expression}" 
-                        placeholder="Sequence: wave,point,wait:500,idle" 
-                        style="width: 100%; background-color: #000; color: #fff; border: 1px solid #555; padding: 3px; font-size: 0.9em;"
-                        title="Optional: Define a sequence of animations instead of a single motion. Format: animation1,animation2,wait:ms,animation3">
-                </div>
             </div>
         </div>
         `);
@@ -778,23 +861,18 @@ async function loadModelUi(use_default_settings) {
             extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['expression'],
             extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['motion']);
 
-        // Set sequence input value
-        const sequenceValue = extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['sequence'] || '';
-        $(`#vrm_sequence_input_${expression}`).val(sequenceValue);
-
         $(`#vrm_expression_select_${expression}`).on('change', function () { updateExpressionMapping(expression); });
         $(`#vrm_motion_select_${expression}`).on('change', function () { updateExpressionMapping(expression); });
         $(`#vrm_expression_replay_${expression}`).on('click', function () { updateExpressionMapping(expression); });
         $(`#vrm_motion_replay_${expression}`).on('click', function () { updateExpressionMapping(expression); });
-        $(`#vrm_sequence_input_${expression}`).on('change', function () { updateExpressionMapping(expression); });
 
         // Default loaded
-        if (extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['expression'] != $(`#vrm_expression_select_${expression}`).val()) {
+        if (use_default_settings && extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['expression'] != $(`#vrm_expression_select_${expression}`).val()) {
             extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['expression'] = $(`#vrm_expression_select_${expression}`).val();
             saveSettingsDebounced();
         }
 
-        if (extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['motion'] != $(`#vrm_motion_select_${expression}`).val()) {
+        if (use_default_settings && extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['motion'] != $(`#vrm_motion_select_${expression}`).val()) {
             extension_settings.vrm.model_settings[model_path]['classify_mapping'][expression]['motion'] = $(`#vrm_motion_select_${expression}`).val();
             saveSettingsDebounced();
         }
@@ -810,7 +888,7 @@ async function updateHitboxMapping(hitbox) {
     const model = String($('#vrm_model_select').val());
     const model_expression = $(`#vrm_hitbox_expression_select_${hitbox}`).val();
     const model_motion = $(`#vrm_hitbox_motion_select_${hitbox}`).val();
-    const sequence = $(`#vrm_hitbox_sequence_${hitbox}`).val();
+    const sequence = extension_settings.vrm.model_settings[model]?.hitboxes_mapping?.[hitbox]?.sequence || '';
     const message = $(`#vrm_hitbox_message_${hitbox}`).val();
 
     extension_settings.vrm.model_settings[model]['hitboxes_mapping'][hitbox] = { 'expression': model_expression, 'motion': model_motion, 'sequence': sequence, 'message': message };
@@ -832,7 +910,7 @@ async function updateExpressionMapping(expression) {
     const model = String($('#vrm_model_select').val());
     const model_expression = $(`#vrm_expression_select_${expression}`).val();
     const model_motion = $(`#vrm_motion_select_${expression}`).val();
-    const sequence = $(`#vrm_sequence_input_${expression}`).val();
+    const sequence = extension_settings.vrm.model_settings[model]?.classify_mapping?.[expression]?.sequence || '';
 
     extension_settings.vrm.model_settings[model]['classify_mapping'][expression] = { 'expression': model_expression, 'motion': model_motion, 'sequence': sequence };
     saveSettingsDebounced();

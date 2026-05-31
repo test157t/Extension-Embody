@@ -122,9 +122,12 @@ let overlayVisualRefreshFrameId = null;
 let overlayAnimationFrameId = null;
 let overlayCssMotionActive = false;
 let overlayCssMotionLastFrameAt = 0;
+let overlayAnimationLastFrameAt = 0;
 let qrBarOriginalParent = null;
 let qrBarOriginalNextSibling = null;
 let qrBarMovedToSendArea = false;
+let qrPlacementObserver = null;
+let qrPlacementApplyTimer = null;
 const overlayDomCache = {
     root: null,
     callUi: null,
@@ -165,8 +168,10 @@ const overlaySpiralCanvas = {
     spinCycleRings: [],
     spinPulseRing: 0,
     spinPulseFrame: 0,
+    renderedFrame: false,
 };
 const OVERLAY_CANVAS_FRAME_INTERVAL_MS = 1000 / 20;
+const OVERLAY_ANIMATION_FRAME_INTERVAL_MS = 1000 / 30;
 let waveformAnimationFrameId = null;
 let waveformLevelSmoothed = 0;
 let waveformBars = [];
@@ -1309,34 +1314,15 @@ function ensureOverlayParticleCanvas() {
 }
 
 function ensureOverlaySpiralCanvas() {
+    const canvas = ensureOverlayParticleCanvas();
     const overlay = document.getElementById('voiceforge_call_overlay');
-    if (!overlay) {
-        return null;
-    }
+    overlay?.querySelector('.vf-call-spiral-canvas')?.remove();
 
-    if (!overlaySpiralCanvas.canvas || !overlay.contains(overlaySpiralCanvas.canvas)) {
-        let canvas = overlay.querySelector('.vf-call-spiral-canvas');
-        if (!canvas) {
-            const effectsLayer = overlay.querySelector('.vf-call-effects-layer');
-            if (effectsLayer) {
-                canvas = document.createElement('canvas');
-                canvas.className = 'vf-call-spiral-canvas';
-                effectsLayer.prepend(canvas);
-            }
-        }
-        if (!canvas) {
-            overlaySpiralCanvas.canvas = null;
-            overlaySpiralCanvas.ctx = null;
-            return null;
-        }
-
-        overlaySpiralCanvas.canvas = canvas;
-        overlaySpiralCanvas.ctx = canvas.getContext('2d', { alpha: true, desynchronized: true });
-        overlaySpiralCanvas.drawWidth = 0;
-        overlaySpiralCanvas.drawHeight = 0;
-    }
-
-    return overlaySpiralCanvas.canvas;
+    overlaySpiralCanvas.canvas = canvas;
+    overlaySpiralCanvas.ctx = overlayCanvasParticles.ctx;
+    overlaySpiralCanvas.drawWidth = overlayCanvasParticles.drawWidth;
+    overlaySpiralCanvas.drawHeight = overlayCanvasParticles.drawHeight;
+    return canvas;
 }
 
 function resizeOverlayParticleCanvas(force = false) {
@@ -1365,28 +1351,15 @@ function resizeOverlayParticleCanvas(force = false) {
 }
 
 function resizeOverlaySpiralCanvas(force = false) {
-    const canvas = ensureOverlaySpiralCanvas();
-    const ctx = overlaySpiralCanvas.ctx;
-    if (!canvas || !ctx) {
+    ensureOverlaySpiralCanvas();
+    resizeOverlayParticleCanvas(force);
+    overlaySpiralCanvas.drawWidth = overlayCanvasParticles.drawWidth;
+    overlaySpiralCanvas.drawHeight = overlayCanvasParticles.drawHeight;
+    overlaySpiralCanvas.ctx = overlayCanvasParticles.ctx;
+
+    if (!overlaySpiralCanvas.canvas || !overlaySpiralCanvas.ctx) {
         return;
     }
-
-    const rect = canvas.getBoundingClientRect();
-    const drawWidth = Math.max(1, Math.round(rect.width));
-    const drawHeight = Math.max(1, Math.round(rect.height));
-    const dpr = Math.max(1, Math.min(1.5, window.devicePixelRatio || 1));
-    const nextWidth = Math.max(1, Math.round(drawWidth * dpr));
-    const nextHeight = Math.max(1, Math.round(drawHeight * dpr));
-
-    if (!force && canvas.width === nextWidth && canvas.height === nextHeight && overlaySpiralCanvas.drawWidth === drawWidth && overlaySpiralCanvas.drawHeight === drawHeight) {
-        return;
-    }
-
-    canvas.width = nextWidth;
-    canvas.height = nextHeight;
-    overlaySpiralCanvas.drawWidth = drawWidth;
-    overlaySpiralCanvas.drawHeight = drawHeight;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 }
 
 function hasActiveOverlayAnimationWork() {
@@ -1457,10 +1430,20 @@ function stopOverlayAnimationLoopIfIdle() {
 function runOverlayAnimationFrame(ts) {
     overlayAnimationFrameId = null;
 
-    const cssMotionActive = updateOverlayCssMotionFrame(ts);
-    const spiralActive = renderOverlaySpiralCanvas(ts);
-    const particlesActive = renderOverlayParticleCanvas(ts);
-    const waveformActive = updateCallWaveformFrame(ts);
+    const now = Number.isFinite(ts) ? ts : performance.now();
+    if (overlayAnimationLastFrameAt !== 0 && (now - overlayAnimationLastFrameAt) < OVERLAY_ANIMATION_FRAME_INTERVAL_MS) {
+        if (hasActiveOverlayAnimationWork()) {
+            overlayAnimationFrameId = requestAnimationFrame(runOverlayAnimationFrame);
+        }
+        return;
+    }
+    overlayAnimationLastFrameAt = now;
+
+    const cssMotionActive = updateOverlayCssMotionFrame(now);
+    const spiralActive = renderOverlaySpiralCanvas(now, true);
+    const sharedCanvas = overlaySpiralCanvas.canvas && overlaySpiralCanvas.canvas === overlayCanvasParticles.canvas;
+    const particlesActive = renderOverlayParticleCanvas(now, !(sharedCanvas && overlaySpiralCanvas.renderedFrame));
+    const waveformActive = updateCallWaveformFrame(now);
 
     if (cssMotionActive || spiralActive || particlesActive || waveformActive) {
         overlayAnimationFrameId = requestAnimationFrame(runOverlayAnimationFrame);
@@ -1471,6 +1454,7 @@ function ensureOverlayAnimationLoop() {
     if (overlayAnimationFrameId !== null || !hasActiveOverlayAnimationWork()) {
         return;
     }
+    overlayAnimationLastFrameAt = 0;
     overlayAnimationFrameId = requestAnimationFrame(runOverlayAnimationFrame);
 }
 
@@ -1506,6 +1490,7 @@ function stopOverlaySpiralCanvas(clearFrame = true) {
     overlaySpiralCanvas.spinCycleRings = [];
     overlaySpiralCanvas.spinPulseRing = 0;
     overlaySpiralCanvas.spinPulseFrame = 0;
+    overlaySpiralCanvas.renderedFrame = false;
 
     if (clearFrame && overlaySpiralCanvas.ctx && overlaySpiralCanvas.drawWidth > 0 && overlaySpiralCanvas.drawHeight > 0) {
         overlaySpiralCanvas.ctx.clearRect(0, 0, overlaySpiralCanvas.drawWidth, overlaySpiralCanvas.drawHeight);
@@ -1515,7 +1500,6 @@ function stopOverlaySpiralCanvas(clearFrame = true) {
 
 function removeOverlaySpiralCanvas() {
     stopOverlaySpiralCanvas(true);
-    overlaySpiralCanvas.canvas?.remove();
     overlaySpiralCanvas.canvas = null;
     overlaySpiralCanvas.ctx = null;
 }
@@ -1616,10 +1600,17 @@ function drawOverlaySpinCycle(ctx, width, height, frameScale, reactiveLevel) {
     }
 }
 
-function renderOverlaySpiralCanvas(ts) {
+function renderOverlaySpiralCanvas(ts, clearFrame = true) {
+    overlaySpiralCanvas.renderedFrame = false;
+
     if (!overlaySpiralCanvas.active || !callActive || isDocumentHidden() || !extension_settings[MODULE_NAME]?.overlayEnabled || !isHypnoFeatureEnabled('hypnoSpiralEnabled')) {
         stopOverlaySpiralCanvas(true);
         return false;
+    }
+
+    const now = Number.isFinite(ts) ? ts : performance.now();
+    if (overlaySpiralCanvas.lastTs !== 0 && (now - overlaySpiralCanvas.lastTs) < OVERLAY_CANVAS_FRAME_INTERVAL_MS) {
+        return true;
     }
 
     const canvas = ensureOverlaySpiralCanvas();
@@ -1635,18 +1626,17 @@ function renderOverlaySpiralCanvas(ts) {
         return true;
     }
 
-    const now = Number.isFinite(ts) ? ts : performance.now();
-    if (overlaySpiralCanvas.lastTs !== 0 && (now - overlaySpiralCanvas.lastTs) < OVERLAY_CANVAS_FRAME_INTERVAL_MS) {
-        return true;
-    }
     const dt = Math.min(0.08, Math.max(0.008, ((now - (overlaySpiralCanvas.lastTs || now)) / 1000) || 0.033));
     overlaySpiralCanvas.lastTs = now;
     const frameScale = dt * 30;
     const reactiveLevel = Math.max(0, Math.min(1, waveformLevelSmoothed || 0));
 
-    ctx.clearRect(0, 0, width, height);
+    if (clearFrame) {
+        ctx.clearRect(0, 0, width, height);
+    }
     drawOverlayVortexDots(ctx, width, height, now, reactiveLevel);
     drawOverlaySpinCycle(ctx, width, height, frameScale, reactiveLevel);
+    overlaySpiralCanvas.renderedFrame = true;
     return true;
 }
 
@@ -1755,7 +1745,7 @@ function getOverlayParticleSprite(style) {
     return sprite;
 }
 
-function renderOverlayParticleCanvas(ts) {
+function renderOverlayParticleCanvas(ts, clearFrame = true) {
     const ctx = overlayCanvasParticles.ctx;
     const width = overlayCanvasParticles.drawWidth;
     const height = overlayCanvasParticles.drawHeight;
@@ -1772,7 +1762,9 @@ function renderOverlayParticleCanvas(ts) {
     const dt = Math.min(0.08, Math.max(0.008, ((ts - (overlayCanvasParticles.lastTs || ts)) / 1000) || 0.016));
     overlayCanvasParticles.lastTs = ts;
 
-    ctx.clearRect(0, 0, width, height);
+    if (clearFrame) {
+        ctx.clearRect(0, 0, width, height);
+    }
     ctx.globalCompositeOperation = 'source-over';
 
     for (const p of overlayCanvasParticles.particles) {
@@ -2241,8 +2233,6 @@ const defaultSettings = {
     overlayScale: 1.0, // Overlay GIF scale (0.1 to 5.0)
     overlayPositionX: 50, // Overlay X position in percentage (0-100, 50 = center)
     overlayPositionY: 50, // Overlay Y position in percentage (0-100, 50 = center)
-    overlayShowStatusText: true,
-    overlayShowWaveform: true,
     // ASR settings for live transcription
     asr_endpoint: 'http://127.0.0.1:8889',
     asr_model: DEFAULT_ASR_MODEL,
@@ -2743,13 +2733,11 @@ function shouldPrewarmSpokenWhispers() {
 }
 
 function shouldShowOverlayStatusText() {
-    const settings = extension_settings[MODULE_NAME] || {};
-    return settings.overlayShowStatusText !== false;
+    return false;
 }
 
 function shouldShowOverlayWaveform() {
-    const settings = extension_settings[MODULE_NAME] || {};
-    return settings.overlayShowWaveform !== false;
+    return false;
 }
 
 function getVoiceForgeProviderSettings() {
@@ -5505,6 +5493,41 @@ function applyQuickRepliesPlacementForCallMode() {
     }
 }
 
+function scheduleQuickRepliesPlacementApply(delayMs = 60) {
+    if (qrPlacementApplyTimer) {
+        clearTimeout(qrPlacementApplyTimer);
+    }
+
+    qrPlacementApplyTimer = setTimeout(() => {
+        qrPlacementApplyTimer = null;
+        applyQuickRepliesPlacementForCallMode();
+    }, Math.max(0, Number(delayMs) || 0));
+}
+
+function ensureQuickRepliesPlacementObserver() {
+    if (qrPlacementObserver || !document.body) {
+        return;
+    }
+
+    qrPlacementObserver = new MutationObserver((mutations) => {
+        if (extension_settings[MODULE_NAME]?.moveQuickRepliesToSendArea !== true) {
+            return;
+        }
+
+        for (const mutation of mutations) {
+            for (const node of mutation.addedNodes) {
+                if (!(node instanceof Element)) continue;
+                if (node.id === 'qr--bar' || node.querySelector?.('#qr--bar') || node.id === 'extensionsMenu' || node.querySelector?.('#extensionsMenu')) {
+                    scheduleQuickRepliesPlacementApply();
+                    return;
+                }
+            }
+        }
+    });
+
+    qrPlacementObserver.observe(document.body, { childList: true, subtree: true });
+}
+
 /**
  * Add call mode styles
  */
@@ -6226,11 +6249,6 @@ function addCallStyles() {
 export function getCallModeSettingsHtml() {
     return `
     <div id="voiceforge_call_mode_settings" class="voiceforge-section">
-        <div class="voiceforge-section-header" id="call_mode_section_header" style="cursor: pointer;">
-            <span><i class="fa-solid fa-phone"></i> Call Mode</span>
-            <i id="call_mode_toggle_icon" class="fa-solid fa-chevron-down"></i>
-        </div>
-        <div id="call_mode_section_content" style="display: none; margin-top: 8px;">
             <p style="font-size: 0.85em; color: var(--SmartThemeEmColor); margin-bottom: 10px;">
                 Live voice conversation. Click <i class="fa-solid fa-phone"></i> to start.
                 ASR options are in General below.
@@ -6357,14 +6375,6 @@ export function getCallModeSettingsHtml() {
                         <hr style="margin: 10px 0;">
 
                         <div id="voiceforge_overlay_settings" style="display: none; margin-left: 20px; margin-top: 8px;">
-                        <label class="checkbox_label" for="voiceforge_call_overlay_show_status">
-                            <input type="checkbox" id="voiceforge_call_overlay_show_status">
-                            <small>Show listening/processing text</small>
-                        </label>
-                        <label class="checkbox_label" for="voiceforge_call_overlay_show_waveform">
-                            <input type="checkbox" id="voiceforge_call_overlay_show_waveform">
-                            <small>Show audio visualizer</small>
-                        </label>
                         <div style="margin-bottom: 8px;">
                             <label for="voiceforge_call_overlay_transparency" style="font-size: 0.85em;">Transparency:</label>
                             <div style="display: flex; align-items: center; gap: 8px;">
@@ -6454,7 +6464,6 @@ export function getCallModeSettingsHtml() {
                 </div>
             </div>
             
-        </div>
     </div>
     `;
 }
@@ -6506,11 +6515,8 @@ export function initCallMode() {
         icon.toggleClass('fa-chevron-down', !isOpen);
 
         header.off('click').on('click', function() {
-            const nextOpen = !content.is(':visible');
             content.slideToggle(160);
             icon.toggleClass('fa-chevron-down fa-chevron-up');
-            extension_settings[MODULE_NAME][settingKey] = nextOpen;
-            saveSettingsDebounced();
         });
     };
 
@@ -6529,15 +6535,11 @@ export function initCallMode() {
         icon.toggleClass('fa-chevron-down', !isOpen);
 
         header.off('click').on('click', function() {
-            const nextOpen = !content.is(':visible');
             content.slideToggle(160);
             icon.toggleClass('fa-chevron-down fa-chevron-up');
-            extension_settings[MODULE_NAME][settingKey] = nextOpen;
-            saveSettingsDebounced();
         });
     };
 
-    initSectionToggle('#call_mode_section_header', '#call_mode_section_content', '#call_mode_toggle_icon', 'uiSectionExpanded', false);
     initSubsection('call_mode_general', 'uiGeneralExpanded', true);
     initSubsection('call_mode_hypno', 'uiOverlayExpanded', true);
     
@@ -6572,7 +6574,9 @@ export function initCallMode() {
     $('#voiceforge_call_move_qr_to_send_area').on('change', function() {
         extension_settings[MODULE_NAME].moveQuickRepliesToSendArea = $(this).is(':checked');
         saveSettingsDebounced();
+        ensureQuickRepliesPlacementObserver();
         applyQuickRepliesPlacementForCallMode();
+        scheduleQuickRepliesPlacementApply(250);
     });
 
     normalizeRandomCallSettings();
@@ -6651,7 +6655,9 @@ export function initCallMode() {
             saveSettingsDebounced();
         });
 
+    ensureQuickRepliesPlacementObserver();
     applyQuickRepliesPlacementForCallMode();
+    scheduleQuickRepliesPlacementApply(250);
 
     const hypnoSettings = extension_settings[MODULE_NAME] || {};
     const hypnoEffectsEnabled = hypnoSettings.hypnoticEffectsEnabled !== false;
@@ -6917,26 +6923,6 @@ export function initCallMode() {
         $('#voiceforge_overlay_settings').show();
     }
 
-    $('#voiceforge_call_overlay_show_status').prop('checked', shouldShowOverlayStatusText());
-    $('#voiceforge_call_overlay_show_waveform').prop('checked', shouldShowOverlayWaveform());
-
-    $('#voiceforge_call_overlay_show_status').on('change', function() {
-        extension_settings[MODULE_NAME].overlayShowStatusText = $(this).is(':checked');
-        saveSettingsDebounced();
-        if (callActive && extension_settings[MODULE_NAME]?.overlayEnabled) {
-            updateCallOverlayStatus();
-            applyOverlayCallUiVisibility();
-        }
-    });
-
-    $('#voiceforge_call_overlay_show_waveform').on('change', function() {
-        extension_settings[MODULE_NAME].overlayShowWaveform = $(this).is(':checked');
-        saveSettingsDebounced();
-        if (callActive && extension_settings[MODULE_NAME]?.overlayEnabled) {
-            applyOverlayCallUiVisibility();
-        }
-    });
-    
     // Z-index control
     $('#voiceforge_call_overlay_zindex').val(extension_settings[MODULE_NAME]?.overlayZIndex ?? 9998);
     $('#voiceforge_call_overlay_zindex').on('input', function() {
@@ -7446,17 +7432,6 @@ function showCallOverlay() {
                                 <div class="vf-ring vf-ring-2"></div>
                                 <div class="vf-ring vf-ring-3"></div>
                             </div>
-                        </div>
-                        <div class="vf-call-status" id="vf-call-status-text">In Call</div>
-                        <div class="vf-call-waveform">
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
-                            <div class="vf-wave-bar"></div>
                         </div>
                     </div>
                 </div>

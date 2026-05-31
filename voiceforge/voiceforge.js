@@ -74,6 +74,7 @@ class VoiceForgeProvider {
     defaultSettings = {
         voiceMap: {},
         provider_endpoint: 'http://127.0.0.1:8888',
+        auto_connect: true,
         chunk_size: 50,  // 5-100, affects quality vs speed tradeoff
         seed: 0,  // 0 = random, -1 = new random each time, >0 = specific seed
     tts_backend: null,
@@ -119,6 +120,10 @@ class VoiceForgeProvider {
                     </button>
                 </div>
                 <small class="text_muted">VoiceForge server must be running</small>
+                <label class="checkbox_label" for="voiceforge_auto_connect" style="margin-top: 6px;">
+                    <input type="checkbox" id="voiceforge_auto_connect">
+                    <small>Auto-connect on startup</small>
+                </label>
             </div>
 
             <hr>
@@ -173,8 +178,9 @@ class VoiceForgeProvider {
         // Update UI checkboxes to reflect loaded settings
         this.updateSettingsUI();
 
-        // Try to connect to VoiceForge server
-        await this.connectToServer();
+        if (this.settings.auto_connect !== false) {
+            await this.connectToServer();
+        }
 
         console.debug('VoiceForge: Settings loaded', this.settings);
     }
@@ -184,6 +190,7 @@ class VoiceForgeProvider {
      */
     updateSettingsUI() {
         $('#voiceforge_endpoint').val(this.settings.provider_endpoint);
+        $('#voiceforge_auto_connect').prop('checked', this.settings.auto_connect !== false);
         
         // TTS generation settings
         const chunkSize = this.settings.chunk_size || 50;
@@ -205,6 +212,11 @@ class VoiceForgeProvider {
         // Endpoint change
         $('#voiceforge_endpoint').off('input').on('input', () => {
             this.settings.provider_endpoint = String($('#voiceforge_endpoint').val()).trim();
+            this.saveTtsProviderSettings();
+        });
+
+        $('#voiceforge_auto_connect').off('change').on('change', () => {
+            this.settings.auto_connect = $('#voiceforge_auto_connect').is(':checked');
             this.saveTtsProviderSettings();
         });
 

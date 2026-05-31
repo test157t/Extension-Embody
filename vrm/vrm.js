@@ -628,12 +628,19 @@ const recentExpressionDispatch = new Map(); // key: character|chat_id -> signatu
 
 const IDENTITY_QUATERNION = new THREE.Quaternion();
 const VRM_MAX_PIXEL_RATIO = 1.35;
+const VRM_LOW_LOAD_PIXEL_RATIO = 1.0;
 const VRM_ACTIVE_FRAME_INTERVAL_MS = 1000 / 60;
+const VRM_OVERLAY_ACTIVE_FRAME_INTERVAL_MS = 1000 / 45;
 const VRM_DEFAULT_FRAME_INTERVAL_MS = 1000 / 30;
 const VRM_IDLE_FRAME_INTERVAL_MS = 1000 / 20;
 const VRM_HELPER_SYNC_INTERVAL_MS = 1000 / 15;
 const VRM_PHONE_SYNC_INTERVAL_MS = 1000 / 30;
+const VRM_LOAD_SETTLE_MS = 4500;
 let lastVrmFrameAt = 0;
+let vrmLowQualityUntil = 0;
+let appliedVrmPixelRatio = 0;
+let callOverlayVisibleCached = false;
+let lastCallOverlayVisibilityCheckAt = 0;
 
 function setIdleFrameJob(character, jobKey, update) {
   if (!character || !jobKey || typeof update !== 'function') return;
@@ -3061,13 +3068,47 @@ function hasRunningMixerAction(mixer) {
     return actions.some((action) => action?.enabled && (!action.isRunning || action.isRunning()));
 }
 
+function isCallOverlayVisible(nowMs = Date.now()) {
+    if (nowMs - lastCallOverlayVisibilityCheckAt < 500) {
+        return callOverlayVisibleCached;
+    }
+    lastCallOverlayVisibilityCheckAt = nowMs;
+
+    const overlay = document.getElementById('voiceforge_call_overlay');
+    if (!overlay || overlay.classList.contains('vf-overlay-no-effects')) {
+        callOverlayVisibleCached = false;
+        return false;
+    }
+
+    const style = window.getComputedStyle(overlay);
+    callOverlayVisibleCached = style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0;
+    return callOverlayVisibleCached;
+}
+
+function applyVrmRenderQuality(nowMs = Date.now()) {
+    if (!renderer) {
+        return;
+    }
+
+    const maxPixelRatio = (nowMs < vrmLowQualityUntil || isCallOverlayVisible(nowMs))
+        ? VRM_LOW_LOAD_PIXEL_RATIO
+        : VRM_MAX_PIXEL_RATIO;
+    const targetPixelRatio = Math.max(1, Math.min(window.devicePixelRatio || 1, maxPixelRatio));
+    if (Math.abs(targetPixelRatio - appliedVrmPixelRatio) < 0.01) {
+        return;
+    }
+
+    renderer.setPixelRatio(targetPixelRatio);
+    appliedVrmPixelRatio = targetPixelRatio;
+}
+
 function getVrmFrameInterval(nowMs) {
     if (Object.keys(current_avatars).length === 0) {
         return VRM_IDLE_FRAME_INTERVAL_MS;
     }
 
     if (isAnyCharacterSpeaking(nowMs) || realtimeLipSyncActive || hasRunningIdleFrameJobs()) {
-        return VRM_ACTIVE_FRAME_INTERVAL_MS;
+        return isCallOverlayVisible(nowMs) ? VRM_OVERLAY_ACTIVE_FRAME_INTERVAL_MS : VRM_ACTIVE_FRAME_INTERVAL_MS;
     }
 
     if (
@@ -3103,6 +3144,7 @@ function animate() {
         lastVrmFrameAt = nowMs;
 
         const deltaTime = clock.getDelta();
+        applyVrmRenderQuality(nowMs);
 
         if (isAnyCharacterSpeaking(nowMs) && nowMs - lastSpeechActivityPingAt > 250) {
             markUserActivity("speech");
@@ -3225,11 +3267,13 @@ async function loadScene() {
 
     clock.start();
     lastVrmFrameAt = 0;
+    vrmLowQualityUntil = Date.now() + VRM_LOAD_SETTLE_MS;
 
     // renderer
-    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'default' });
+    renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: 'high-performance' });
     renderer.setSize( window.innerWidth, window.innerHeight );
-    renderer.setPixelRatio( Math.min(window.devicePixelRatio || 1, VRM_MAX_PIXEL_RATIO) );
+    appliedVrmPixelRatio = Math.min(window.devicePixelRatio || 1, VRM_LOW_LOAD_PIXEL_RATIO);
+    renderer.setPixelRatio( appliedVrmPixelRatio );
     renderer.domElement.id = VRM_CANVAS_ID;
     document.body.appendChild( renderer.domElement );
 
@@ -3343,6 +3387,7 @@ async function setModel(character,model_path) {
         blink(character, modelId);
     textTalk(character, modelId);
     markUserActivity("model-load");
+    vrmLowQualityUntil = Date.now() + VRM_LOAD_SETTLE_MS;
     suspendNaturalIdle(character, 2500);
     scheduleNaturalIdleCheck(character, modelId, 2500, "model-load");
     current_avatars[character]["objectContainer"].visible = true;
@@ -3694,26 +3739,42 @@ async function initModel(model) {
   object_container.rotation.y = extension_settings.vrm.model_settings[model_path]['ry'];
   object_container.rotation.z = 0.0;
 
-  // Cache model animations
-    if (extension_settings.vrm.animations_cache && animations_cache[model_path] === undefined) {
-        animations_cache[model_path] = {};
-        const animation_names = [extension_settings.vrm.model_settings[model_path]['animation_default']['motion']]
-        for (const i in extension_settings.vrm.model_settings[model_path]['classify_mapping']) {
-            animation_names.push(extension_settings.vrm.model_settings[model_path]['classify_mapping'][i]["motion"]);
+  scheduleAnimationCacheWarmup(model);
+}
+
+function scheduleAnimationCacheWarmup(model) {
+    const model_path = model?.model_path;
+    if (!model_path || !extension_settings.vrm.animations_cache || animations_cache[model_path]?._warmupStarted) {
+        return;
+    }
+
+    animations_cache[model_path] ??= {};
+    animations_cache[model_path]._warmupStarted = true;
+
+    setTimeout(async () => {
+        const cache = animations_cache[model_path];
+        if (!cache || !extension_settings.vrm.animations_cache) {
+            return;
         }
 
-        let count = 0;
-        for (const file of animations_files) {
-            count++;
-            for (const i of animation_names) {
-                if(file.includes(i) && animations_cache[model_path][file] === undefined) {
-                    const clip = await loadAnimation(model["vrm"], model["hipsHeight"], file);
-                    if (clip !== undefined)
-                        animations_cache[model_path][file] = clip;
-                }
-            }
+        const modelSettings = extension_settings.vrm.model_settings?.[model_path] || {};
+        const animationNames = [modelSettings.animation_default?.motion];
+        for (const key in modelSettings.classify_mapping || {}) {
+            animationNames.push(modelSettings.classify_mapping[key]?.motion);
         }
-    }
+        const normalizedNames = animationNames.filter(Boolean).map((name) => String(name));
+
+        for (const file of animations_files) {
+            if (!normalizedNames.some((name) => file.includes(name)) || cache[file] !== undefined) {
+                continue;
+            }
+            const clip = await loadAnimation(model.vrm, model.hipsHeight, file);
+            if (clip !== undefined) {
+                cache[file] = clip;
+            }
+            await delay(0);
+        }
+    }, 1200);
 }
 
 async function setExpression(character, value) {
@@ -3877,37 +3938,61 @@ async function restoreExpressionState(character, expressionName) {
 }
 
 async function loadAnimation(vrm, hipsHeight, motion_file_path) {
+    motion_file_path = String(motion_file_path || '').trim().replaceAll('\\', '/');
+    const animationPathCandidates = [motion_file_path];
+    if (motion_file_path.startsWith('/')) {
+        animationPathCandidates.push(motion_file_path.replace(/^\/+/, ''));
+    } else if (motion_file_path && !/^(?:https?:|blob:|data:)/i.test(motion_file_path)) {
+        animationPathCandidates.push(`/${motion_file_path.replace(/^\/+/, '')}`);
+    }
     let clip;
+    let lastLoadError = null;
     try {
-        // Mixamo animation
-        if (motion_file_path.endsWith(".fbx")) {
-            clip = await loadMixamoAnimation(motion_file_path, vrm, hipsHeight);
-        }
-        else if (motion_file_path.endsWith(".bvh")) {
-            clip = await loadBVHAnimation(motion_file_path, vrm, hipsHeight);
-        }
-        else if (motion_file_path.endsWith(".vmd")) {
-            // MMD motion file
-            clip = await loadMMDAnimation(motion_file_path, vrm, hipsHeight);
-        }
-        else if (motion_file_path.endsWith(".vrma")) {
-            // VRMA (VRM Animation) file
-            const vrmaLoader = new VRMALoader();
-            const result = await vrmaLoader.loadAsync(motion_file_path, vrm);
-            clip = result ? result.clip : null;
-        }
-        else {
-            toastr.error('Wrong animation file format:' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
-            return null;
+        for (const candidatePath of animationPathCandidates.filter(Boolean).filter((value, index, array) => array.indexOf(value) === index)) {
+            const candidatePathLower = candidatePath.toLowerCase();
+            try {
+                // Mixamo animation
+                if (candidatePathLower.endsWith(".fbx")) {
+                    clip = await loadMixamoAnimation(candidatePath, vrm, hipsHeight);
+                }
+                else if (candidatePathLower.endsWith(".bvh")) {
+                    clip = await loadBVHAnimation(candidatePath, vrm, hipsHeight);
+                }
+                else if (candidatePathLower.endsWith(".vmd")) {
+                    // MMD motion file
+                    clip = await loadMMDAnimation(candidatePath, vrm, hipsHeight);
+                }
+                else if (candidatePathLower.endsWith(".vrma")) {
+                    // VRMA (VRM Animation) file
+                    const vrmaLoader = new VRMALoader();
+                    const result = await vrmaLoader.loadAsync(candidatePath, vrm);
+                    clip = result ? result.clip : null;
+                }
+                else {
+                    toastr.error('Wrong animation file format:' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+                    return null;
+                }
+
+                if (clip) {
+                    motion_file_path = candidatePath;
+                    break;
+                }
+            } catch (error) {
+                lastLoadError = error;
+            }
         }
 
         if (!clip) {
-            toastr.error('Wrong animation file format:' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+            if (lastLoadError) {
+                throw lastLoadError;
+            }
+            toastr.error('Animation file did not produce a playable clip: ' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
             return null;
         }
     }
     catch (error) {
-        toastr.error('Wrong animation file format:' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
+        console.warn(DEBUG_PREFIX, 'Failed to load animation', motion_file_path, error);
+        toastr.error('Failed to load animation: ' + motion_file_path, DEBUG_PREFIX + ' cannot play animation', { timeOut: 10000, extendedTimeOut: 20000, preventDuplicates: true });
         return null;
     }
     return clip;

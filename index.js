@@ -4422,7 +4422,12 @@ jQuery(async function () {
         }
         const audioPanel = $('#embody-audio-panel');
         if (audioPanel.length && audioSection.length) {
-            audioPanel.empty().append(audioSection);
+            const audioDivider = audioSection.prev('hr');
+            const audioContent = audioSection.find('#audio_section_content');
+            audioContent.show();
+            audioPanel.empty().append(audioContent.children());
+            audioSection.remove();
+            audioDivider.remove();
         }
 
         const environmentPanel = $('#embody-environment-panel');

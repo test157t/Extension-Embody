@@ -56,6 +56,9 @@ function currentChatMembers() {
 }
 
 function loadAnimationUi(type, use_default_settings, model_expressions, model_motions, expression_select_id, motion_select_id, expression_select_value, motion_select_value, default_settings=false) {
+    const expressionSelect = $(`#${expression_select_id}`);
+    const motionSelect = $(`#${motion_select_id}`);
+
     $(`#${expression_select_id}`)
         .find('option')
         .remove()
@@ -69,17 +72,28 @@ function loadAnimationUi(type, use_default_settings, model_expressions, model_mo
         .append('<option value="none">Select motion</option>');
 
     for (const expression of model_expressions) {
-        $(`#${expression_select_id}`).append(new Option(expression, expression));
+        expressionSelect.append(new Option(expression, expression));
     }
 
     for (const motion of model_motions) {
-        const name = motion.substring(motion.lastIndexOf('/')+1).replace(".fbx","").replace(".bvh","");
-        $(`#${motion_select_id}`).append(new Option(name, motion));
+        const name = motion.substring(motion.lastIndexOf('/')+1).replace(/\.(fbx|bvh|vmd|vrma)$/i, "");
+        motionSelect.append(new Option(name, motion));
+    }
+
+    const hasOptionValue = (select, value) => select.find('option').toArray().some(option => String(option.value) === String(value));
+
+    if (expression_select_value && expression_select_value !== 'none' && !hasOptionValue(expressionSelect, expression_select_value)) {
+        expressionSelect.append(new Option(expression_select_value, expression_select_value));
+    }
+
+    if (motion_select_value && motion_select_value !== 'none' && !hasOptionValue(motionSelect, motion_select_value)) {
+        const motionLabel = String(motion_select_value).split(/[\\/]/).pop().replace(/\.(fbx|bvh|vmd|vrma)$/i, "");
+        motionSelect.append(new Option(motionLabel, motion_select_value));
     }
 
     
-    $(`#${expression_select_id}`).val(expression_select_value);
-    $(`#${motion_select_id}`).val(motion_select_value);
+    expressionSelect.val(expression_select_value);
+    motionSelect.val(motion_select_value);
 
     if (use_default_settings) {
         if (model_expressions.includes(DEFAULT_EXPRESSION_MAPPING[type])) {
